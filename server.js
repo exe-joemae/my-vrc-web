@@ -43,32 +43,27 @@ wss.on("connection", (ws, req) => {
   ws.on("close", () => wsClients.delete(ws));
 });
 
-// --- 音声チャット（全員 or ルーム単位） ---
-// WebRTC のシグナリングを Socket.IO でやる
+// --- 音声チャット（WebRTC シグナリング） ---
 io.on("connection", (socket) => {
   socket.on("join-room", (roomId) => {
     socket.join(roomId);
     socket.roomId = roomId;
   });
 
-  // WebRTC offer/answer/candidate を中継
   socket.on("signal", (payload) => {
     const { to, data } = payload;
     io.to(to).emit("signal", { from: socket.id, data });
   });
 
-  // ルーム内の他ユーザー一覧を返す
   socket.on("get-peers", (roomId, cb) => {
     const room = io.sockets.adapter.rooms.get(roomId);
     const peers = room ? Array.from(room).filter((id) => id !== socket.id) : [];
     cb(peers);
   });
 
-  // --- 全ルーム共通SNS（超簡易） ---
-  // メモリ上に保持（本番ならDB）
+  // --- 全ルーム共通SNS ---
   socket.on("sns-post", (post) => {
-    // { user, text, time }
-    io.emit("sns-feed", post); // 全クライアントに配信
+    io.emit("sns-feed", post);
   });
 });
 
