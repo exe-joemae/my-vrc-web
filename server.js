@@ -13,19 +13,28 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 // --- 位置同期（ルームごとの簡易VRC） ---
-let wsClients = new Map(); // ws -> { id, room }
+let wsClients = new Map(); // ws -> { id, room, accountName }
 
 wss.on("connection", (ws, req) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const room = url.searchParams.get("room") || "lobby";
   const id = Math.random().toString(36).slice(2);
 
-  wsClients.set(ws, { id, room });
+  wsClients.set(ws, { id, room, accountName: "Guest" });
 
   ws.on("message", (msg) => {
     const data = JSON.parse(msg);
+
+    if (data.type === "account") {
+      // アカウント名更新
+      const info = wsClients.get(ws);
+      if (info) info.accountName = data.accountName || "Guest";
+      return;
+    }
+
     if (data.type === "move") {
       const me = wsClients.get(ws);
+      if (!me) return;
       for (const [client, info] of wsClients) {
         if (client !== ws && info.room === me.room) {
           client.send(
@@ -33,7 +42,8 @@ wss.on("connection", (ws, req) => {
               type: "spawn",
               id: me.id,
               pos: data.pos,
-              avatarColor: data.avatarColor || "#00AAFF"
+              avatarColor: data.avatarColor || "#00AAFF",
+              accountName: me.accountName || "Guest"
             })
           );
         }
@@ -68,11 +78,12 @@ io.on("connection", (socket) => {
     io.emit("sns-feed", post);
   });
 
-  // DM（1対1）
+  // DM（アカウント名付き）
   socket.on("dm-send", (payload) => {
-    const { toSocketId, message } = payload;
+    const { toSocketId, message, fromAccount } = payload;
     io.to(toSocketId).emit("dm-receive", {
       from: socket.id,
+      fromAccount,
       message
     });
   });
