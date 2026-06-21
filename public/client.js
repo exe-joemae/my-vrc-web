@@ -10,6 +10,7 @@ roomInput.value = currentRoom;
 const playerRoot = document.getElementById("playerRoot");
 const playerCamera = document.getElementById("playerCamera");
 const playerAvatar = document.getElementById("playerAvatar");
+const playerNameTag = document.getElementById("playerNameTag");
 const ground = document.getElementById("ground");
 const box1 = document.getElementById("box1");
 
@@ -21,10 +22,46 @@ let keys = {};
 let yaw = 0;
 let pitch = 0;
 
+// --- アカウント情報 ---
+const accountNameInput = document.getElementById("accountName");
+const phoneAccountNameInput = document.getElementById("phoneAccountName");
+const socketIdLabel = document.getElementById("socketIdLabel");
+let accountName = "Guest";
+
 // --- アバター色（同期用） ---
 let avatarColor = "#FFAA00";
 
-// キー入力
+// --- スマホキー ---
+let phoneKey = "p";
+const phoneKeyInput = document.getElementById("phoneKeyInput");
+const phoneKeySave = document.getElementById("phoneKeySave");
+const phoneKeyLabel = document.getElementById("phoneKeyLabel");
+
+// --- スマホUI ---
+const phone = document.getElementById("phone");
+const phoneClose = document.getElementById("phone-close");
+const phoneTabs = document.querySelectorAll("#phone-tabs button");
+
+// --- ルーム模様替え ---
+const roomGroundColorInput = document.getElementById("roomGroundColor");
+const roomBoxColorInput = document.getElementById("roomBoxColor");
+const roomApplyBtn = document.getElementById("roomApply");
+
+// --- アバター設定 ---
+const avatarColorInput = document.getElementById("avatarColorInput");
+const avatarApplyBtn = document.getElementById("avatarApply");
+
+// --- DM ---
+const dmToInput = document.getElementById("dm-to");
+const dmTextInput = document.getElementById("dm-text");
+const dmSendBtn = document.getElementById("dm-send");
+const dmLog = document.getElementById("dm-log");
+
+// --- セーブ/ロードボタン ---
+const saveAllBtn = document.getElementById("saveAllBtn");
+const loadAllBtn = document.getElementById("loadAllBtn");
+
+// --- キー入力 ---
 window.addEventListener("keydown", (e) => {
   keys[e.key.toLowerCase()] = true;
 });
@@ -71,7 +108,7 @@ window.addEventListener("keydown", (e) => {
   pitch = Math.max(-80, Math.min(80, pitch));
 });
 
-// --- WebSocket（位置同期） ---
+// --- WebSocket（位置同期＋アカウント名） ---
 let ws;
 function connectWS(room) {
   const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -79,12 +116,15 @@ function connectWS(room) {
 
   ws.onopen = () => {
     console.log("WS connected");
+    // アカウント名をサーバに送る
+    sendAccountToWS();
   };
 
   ws.onmessage = (msg) => {
     const data = JSON.parse(msg.data);
     if (data.type === "spawn") {
       let e = document.getElementById(data.id);
+      let nameTag;
       if (!e) {
         e = document.createElement("a-entity");
         e.setAttribute("id", data.id);
@@ -97,17 +137,68 @@ function connectWS(room) {
           `color: ${data.avatarColor || "#00AAFF"}`
         );
         e.setAttribute("position", "0 0 0");
+
+        // ネームタグ
+        nameTag = document.createElement("a-entity");
+        nameTag.setAttribute(
+          "text",
+          `value: ${data.accountName || "Guest"}; align: center; color: #00FFFF; width: 4`
+        );
+        nameTag.setAttribute("position", "0 2.2 0");
+        nameTag.setAttribute("id", `name-${data.id}`);
+
+        e.appendChild(nameTag);
         document.querySelector("a-scene").appendChild(e);
+      } else {
+        nameTag = document.getElementById(`name-${data.id}`);
       }
+
       e.setAttribute("position", data.pos);
       if (data.avatarColor) {
         e.setAttribute("material", `color: ${data.avatarColor}`);
+      }
+      if (nameTag && data.accountName) {
+        nameTag.setAttribute(
+          "text",
+          `value: ${data.accountName}; align: center; color: #00FFFF; width: 4`
+        );
       }
     }
   };
 }
 
 connectWS(currentRoom);
+
+// --- アカウント名変更 ---
+function updateAccountName(newName) {
+  accountName = newName || "Guest";
+  accountNameInput.value = accountName;
+  phoneAccountNameInput.value = accountName;
+  playerNameTag.setAttribute(
+    "text",
+    `value: ${accountName}; align: center; color: #00FFFF; width: 4`
+  );
+  sendAccountToWS();
+}
+
+accountNameInput.addEventListener("change", () => {
+  updateAccountName(accountNameInput.value.trim());
+});
+
+phoneAccountNameInput.addEventListener("change", () => {
+  updateAccountName(phoneAccountNameInput.value.trim());
+});
+
+function sendAccountToWS() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(
+      JSON.stringify({
+        type: "account",
+        accountName
+      })
+    );
+  }
+}
 
 // --- ルーム切り替え ---
 joinRoomBtn.onclick = () => {
@@ -128,6 +219,10 @@ let localStream = null;
 let peers = {}; // peerId -> RTCPeerConnection
 
 socket.emit("join-room", currentRoom);
+
+socket.on("connect", () => {
+  socketIdLabel.textContent = socket.id;
+});
 
 startVoiceBtn.onclick = async () => {
   if (localStream) {
@@ -208,15 +303,6 @@ async function createPeerConnection(peerId, isCaller) {
 }
 
 // --- スマホUI制御 ---
-const phone = document.getElementById("phone");
-const phoneClose = document.getElementById("phone-close");
-const phoneTabs = document.querySelectorAll("#phone-tabs button");
-const phoneKeyInput = document.getElementById("phoneKeyInput");
-const phoneKeySave = document.getElementById("phoneKeySave");
-const phoneKeyLabel = document.getElementById("phoneKeyLabel");
-
-let phoneKey = "p"; // デフォルト P キー
-
 function setPhoneKeyLabel() {
   phoneKeyLabel.textContent = phoneKey.toUpperCase();
 }
@@ -266,11 +352,7 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// --- ルーム模様替え（スマホ） ---
-const roomGroundColorInput = document.getElementById("roomGroundColor");
-const roomBoxColorInput = document.getElementById("roomBoxColor");
-const roomApplyBtn = document.getElementById("roomApply");
-
+// --- ルーム模様替え ---
 roomApplyBtn.onclick = () => {
   const gColor = roomGroundColorInput.value || "#7BC8A4";
   const bColor = roomBoxColorInput.value || "#4CC3D9";
@@ -278,34 +360,31 @@ roomApplyBtn.onclick = () => {
   box1.setAttribute("color", bColor);
 };
 
-// --- アバター設定（スマホ） ---
-const avatarColorInput = document.getElementById("avatarColorInput");
-const avatarApplyBtn = document.getElementById("avatarApply");
-
+// --- アバター設定 ---
 avatarApplyBtn.onclick = () => {
   avatarColor = avatarColorInput.value || "#FFAA00";
   playerAvatar.setAttribute("material", `color: ${avatarColor}`);
 };
 
-// --- DM（スマホ） ---
-const dmToInput = document.getElementById("dm-to");
-const dmTextInput = document.getElementById("dm-text");
-const dmSendBtn = document.getElementById("dm-send");
-const dmLog = document.getElementById("dm-log");
-
+// --- DM ---
 dmSendBtn.onclick = () => {
   const toSocketId = dmToInput.value.trim();
   const message = dmTextInput.value.trim();
   if (!toSocketId || !message) return;
 
-  socket.emit("dm-send", { toSocketId, message });
+  socket.emit("dm-send", {
+    toSocketId,
+    message,
+    fromAccount: accountName
+  });
 
-  addDmLog("自分 → " + toSocketId, message);
+  addDmLog(`自分 (${accountName}) → ${toSocketId}`, message);
   dmTextInput.value = "";
 };
 
-socket.on("dm-receive", ({ from, message }) => {
-  addDmLog("受信 ← " + from, message);
+socket.on("dm-receive", ({ from, fromAccount, message }) => {
+  const label = `${fromAccount || "Unknown"} (${from})`;
+  addDmLog(`受信 ← ${label}`, message);
 });
 
 function addDmLog(fromLabel, text) {
@@ -324,6 +403,83 @@ function addDmLog(fromLabel, text) {
   div.appendChild(textEl);
   dmLog.prepend(div);
 }
+
+// --- セーブ/ロード（localStorage） ---
+const SAVE_KEY = "cyber-vrc-save";
+
+saveAllBtn.onclick = () => {
+  const data = {
+    accountName,
+    avatarColor,
+    phoneKey,
+    groundColor: ground.getAttribute("color"),
+    boxColor: box1.getAttribute("color")
+  };
+  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  alert("セーブしました");
+};
+
+loadAllBtn.onclick = () => {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (!raw) {
+    alert("セーブデータがありません");
+    return;
+  }
+  try {
+    const data = JSON.parse(raw);
+    if (data.accountName) updateAccountName(data.accountName);
+    if (data.avatarColor) {
+      avatarColor = data.avatarColor;
+      avatarColorInput.value = avatarColor;
+      playerAvatar.setAttribute("material", `color: ${avatarColor}`);
+    }
+    if (data.phoneKey) {
+      phoneKey = data.phoneKey;
+      setPhoneKeyLabel();
+    }
+    if (data.groundColor) {
+      ground.setAttribute("color", data.groundColor);
+      roomGroundColorInput.value = data.groundColor;
+    }
+    if (data.boxColor) {
+      box1.setAttribute("color", data.boxColor);
+      roomBoxColorInput.value = data.boxColor;
+    }
+    alert("ロードしました");
+  } catch (e) {
+    console.error(e);
+    alert("セーブデータの読み込みに失敗しました");
+  }
+};
+
+// 起動時に自動ロード（あれば）
+(function autoLoad() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (!raw) return;
+  try {
+    const data = JSON.parse(raw);
+    if (data.accountName) updateAccountName(data.accountName);
+    if (data.avatarColor) {
+      avatarColor = data.avatarColor;
+      avatarColorInput.value = avatarColor;
+      playerAvatar.setAttribute("material", `color: ${avatarColor}`);
+    }
+    if (data.phoneKey) {
+      phoneKey = data.phoneKey;
+      setPhoneKeyLabel();
+    }
+    if (data.groundColor) {
+      ground.setAttribute("color", data.groundColor);
+      roomGroundColorInput.value = data.groundColor;
+    }
+    if (data.boxColor) {
+      box1.setAttribute("color", data.boxColor);
+      roomBoxColorInput.value = data.boxColor;
+    }
+  } catch (e) {
+    console.error(e);
+  }
+})();
 
 // --- 毎フレーム更新（重力＋移動＋視点回転＋位置同期） ---
 let lastTime = performance.now();
