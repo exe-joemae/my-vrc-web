@@ -1,3 +1,4 @@
+/* ====== 基本 ====== */
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
@@ -5,7 +6,7 @@ body {
   color: #e0f7ff;
 }
 
-/* ログイン */
+/* ====== ログイン画面 ====== */
 .login-overlay {
   position: fixed;
   inset: 0;
@@ -75,7 +76,7 @@ body {
   display: none;
 }
 
-/* サイバーHUD */
+/* ====== サイバーHUD ====== */
 .cyber-panel {
   position: absolute;
   top: 10px;
@@ -164,6 +165,7 @@ input {
   border: 1px solid #00ffff33;
 }
 
+/* ====== SNS ====== */
 .sns-item {
   margin-bottom: 4px;
   border-bottom: 1px solid rgba(0, 255, 255, 0.2);
@@ -178,7 +180,7 @@ input {
   opacity: 0.7;
 }
 
-/* スマホ */
+/* ====== スマホ ====== */
 .phone {
   position: absolute;
   right: 20px;
@@ -246,6 +248,7 @@ input {
   display: none;
 }
 
+/* ====== DM ====== */
 #phone-sns-feed,
 #dm-log {
   max-height: 180px;
@@ -271,7 +274,36 @@ input {
   font-size: 12px;
 }
 
-/* エディタ */
+/* ====== MAP（スマホ） ====== */
+#map-canvas-wrapper {
+  width: 240px;
+  height: 240px;
+  margin: 0 auto;
+  border: 1px solid #00ffff55;
+  border-radius: 8px;
+  background: rgba(0, 10, 30, 0.6);
+  box-shadow: 0 0 12px #00ffff33;
+}
+
+#map-canvas {
+  width: 240px;
+  height: 240px;
+}
+
+.map-controls {
+  margin-bottom: 6px;
+}
+
+.map-controls select {
+  width: 100%;
+  padding: 4px;
+  border-radius: 4px;
+  border: 1px solid #00ffff55;
+  background: #050818;
+  color: #e0f7ff;
+}
+
+/* ====== エディタ ====== */
 .editor-overlay {
   position: fixed;
   inset: 0;
