@@ -3,6 +3,7 @@ const http = require("http");
 const path = require("path");
 const WebSocket = require("ws");
 const { Server } = require("socket.io");
+const crypto = require("crypto");
 
 const app = express();
 const server = http.createServer(app);
@@ -13,65 +14,211 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 /**
- * 簡易DB（メモリ）
- * users: username -> { username, displayName, avatarColor, phoneKey, groundColor, boxColor }
+ * 簡易メモリDB
+ * users: username -> { username, passwordHash, displayName, avatarColor, phoneKey }
+ * rooms: roomId -> {
+ *   owner: username,
+ *   name: string,
+ *   environment: { skyColor, fogColor, fogDensity, ambientColor },
+ *   bounds: { width, depth },
+ *   objects: [
+ *     { id, type, position:{x,y,z}, rotation:{x,y,z}, scale:{x,y,z}, color, modelUrl? }
+ *   ]
+ * }
  * snsMessages: [{ userDisplayName, text, time }]
- * dmMessages: [{ fromUsername, fromDisplayName, toUsername, message, time }]
+ * dmMessages: [{ fromUsername, fromDisplayName, toUsername, message, time, read }]
  */
 const db = {
   users: {},
+  rooms: {},
   snsMessages: [],
   dmMessages: []
 };
 
-// --- REST API: ユーザーデータ保存/取得 ---
+// パスワードハッシュ（デモ用）
+function hashPassword(password) {
+  return crypto.createHash("sha256").update(password).digest("hex");
+}
 
-// 保存（アップサート）
-app.post("/api/saveUser", (req, res) => {
-  const {
-    username,
-    displayName,
-    avatarColor,
-    phoneKey,
-    groundColor,
-    boxColor
-  } = req.body || {};
+// --- 認証API ---
 
-  if (!username) {
-    return res.status(400).json({ error: "username is required" });
+// 新規登録
+app.post("/api/register", (req, res) => {
+  const { username, password, displayName } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ error: "username and password required" });
+  }
+  if (db.users[username]) {
+    return res.status(400).json({ error: "username already exists" });
   }
 
   db.users[username] = {
     username,
+    passwordHash: hashPassword(password),
     displayName: displayName || username,
-    avatarColor: avatarColor || "#FFAA00",
-    phoneKey: phoneKey || "p",
-    groundColor: groundColor || "#7BC8A4",
-    boxColor: boxColor || "#4CC3D9"
+    avatarColor: "#FFAA00",
+    phoneKey: "p"
   };
 
-  res.json({ ok: true, user: db.users[username] });
+  res.json({ ok: true });
 });
 
-// 取得
-app.get("/api/getUser/:username", (req, res) => {
-  const username = req.params.username;
+// ログイン
+app.post("/api/login", (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ error: "username and password required" });
+  }
   const user = db.users[username];
   if (!user) {
-    return res.status(404).json({ error: "user not found" });
+    return res.status(400).json({ error: "user not found" });
   }
-  res.json({ ok: true, user });
+  if (user.passwordHash !== hashPassword(password)) {
+    return res.status(400).json({ error: "invalid password" });
+  }
+
+  // 超簡易トークン（デモ用）
+  const token = crypto.randomBytes(16).toString("hex");
+  user.sessionToken = token;
+
+  res.json({
+    ok: true,
+    token,
+    user: {
+      username: user.username,
+      displayName: user.displayName,
+      avatarColor: user.avatarColor,
+      phoneKey: user.phoneKey
+    }
+  });
 });
 
-// SNS履歴取得
+// ユーザー情報取得
+app.get("/api/me", (req, res) => {
+  const token = req.headers["x-session-token"];
+  const user = Object.values(db.users).find((u) => u.sessionToken === token);
+  if (!user) return res.status(401).json({ error: "invalid session" });
+
+  res.json({
+    ok: true,
+    user: {
+      username: user.username,
+      displayName: user.displayName,
+      avatarColor: user.avatarColor,
+      phoneKey: user.phoneKey
+    }
+  });
+});
+
+// ユーザー設定更新（表示名・アバター色・スマホキー）
+app.post("/api/updateUser", (req, res) => {
+  const token = req.headers["x-session-token"];
+  const user = Object.values(db.users).find((u) => u.sessionToken === token);
+  if (!user) return res.status(401).json({ error: "invalid session" });
+
+  const { displayName, avatarColor, phoneKey } = req.body || {};
+  if (displayName) user.displayName = displayName;
+  if (avatarColor) user.avatarColor = avatarColor;
+  if (phoneKey) user.phoneKey = phoneKey;
+
+  res.json({ ok: true });
+});
+
+// --- ルームAPI（所有者のみ編集） ---
+
+// 自分のルーム一覧
+app.get("/api/myRooms", (req, res) => {
+  const token = req.headers["x-session-token"];
+  const user = Object.values(db.users).find((u) => u.sessionToken === token);
+  if (!user) return res.status(401).json({ error: "invalid session" });
+
+  const rooms = Object.entries(db.rooms)
+    .filter(([id, room]) => room.owner === user.username)
+    .map(([id, room]) => ({
+      id,
+      name: room.name,
+      environment: room.environment,
+      bounds: room.bounds,
+      objects: room.objects
+    }));
+
+  res.json({ ok: true, rooms });
+});
+
+// ルーム作成
+app.post("/api/createRoom", (req, res) => {
+  const token = req.headers["x-session-token"];
+  const user = Object.values(db.users).find((u) => u.sessionToken === token);
+  if (!user) return res.status(401).json({ error: "invalid session" });
+
+  const { roomId, name } = req.body || {};
+  if (!roomId) return res.status(400).json({ error: "roomId required" });
+  if (db.rooms[roomId]) {
+    return res.status(400).json({ error: "roomId already exists" });
+  }
+
+  db.rooms[roomId] = {
+    owner: user.username,
+    name: name || roomId,
+    environment: {
+      skyColor: "#000022",
+      fogColor: "#000000",
+      fogDensity: 0.02,
+      ambientColor: "#FFFFFF"
+    },
+    bounds: {
+      width: 50,
+      depth: 50
+    },
+    objects: []
+  };
+
+  res.json({ ok: true, room: db.rooms[roomId] });
+});
+
+// ルーム取得
+app.get("/api/getRoom/:roomId", (req, res) => {
+  const roomId = req.params.roomId;
+  const room = db.rooms[roomId];
+  if (!room) return res.status(404).json({ error: "room not found" });
+  res.json({ ok: true, room });
+});
+
+// ルーム更新（環境＋オブジェクト＋範囲）
+app.post("/api/updateRoom/:roomId", (req, res) => {
+  const token = req.headers["x-session-token"];
+  const user = Object.values(db.users).find((u) => u.sessionToken === token);
+  if (!user) return res.status(401).json({ error: "invalid session" });
+
+  const roomId = req.params.roomId;
+  const room = db.rooms[roomId];
+  if (!room) return res.status(404).json({ error: "room not found" });
+  if (room.owner !== user.username) {
+    return res.status(403).json({ error: "not owner" });
+  }
+
+  const { environment, bounds, objects } = req.body || {};
+  if (environment) room.environment = environment;
+  if (bounds) room.bounds = bounds;
+  if (Array.isArray(objects)) room.objects = objects;
+
+  res.json({ ok: true, room });
+});
+
+// --- SNS履歴取得 ---
 app.get("/api/snsHistory", (req, res) => {
   res.json({ ok: true, messages: db.snsMessages });
 });
 
-// DM履歴取得（自分宛）
-app.get("/api/dmHistory/:username", (req, res) => {
-  const username = req.params.username;
-  const messages = db.dmMessages.filter((m) => m.toUsername === username);
+// --- DM履歴取得（自分宛） ---
+app.get("/api/dmHistory", (req, res) => {
+  const token = req.headers["x-session-token"];
+  const user = Object.values(db.users).find((u) => u.sessionToken === token);
+  if (!user) return res.status(401).json({ error: "invalid session" });
+
+  const messages = db.dmMessages.filter(
+    (m) => m.toUsername === user.username
+  );
   res.json({ ok: true, messages });
 });
 
@@ -118,7 +265,7 @@ wss.on("connection", (ws, req) => {
   ws.on("close", () => wsClients.delete(ws));
 });
 
-// --- 音声チャット（WebRTC シグナリング）＋SNS＋DM ---
+// --- 音声チャット＋SNS＋DM ---
 io.on("connection", (socket) => {
   socket.on("join-room", (payload) => {
     const { roomId, username } = payload || {};
@@ -126,10 +273,8 @@ io.on("connection", (socket) => {
     socket.roomId = roomId || "lobby";
     socket.username = username || "guest";
 
-    // 接続時にSNS履歴を送る
     socket.emit("sns-history", db.snsMessages);
 
-    // 接続時にDM履歴（自分宛）を送る
     const myDm = db.dmMessages.filter(
       (m) => m.toUsername === socket.username
     );
@@ -148,10 +293,10 @@ io.on("connection", (socket) => {
     cb(peers);
   });
 
-  // SNS投稿（履歴に保存）
+  // SNS投稿
   socket.on("sns-post", (post) => {
     const msg = {
-      userDisplayName: post.userDisplayName || post.user || "名無し",
+      userDisplayName: post.userDisplayName || "名無し",
       text: post.text,
       time: post.time
     };
@@ -159,7 +304,7 @@ io.on("connection", (socket) => {
     io.emit("sns-feed", msg);
   });
 
-  // DM（履歴に保存）
+  // DM送信
   socket.on("dm-send", (payload) => {
     const {
       toSocketId,
@@ -174,7 +319,8 @@ io.on("connection", (socket) => {
       fromDisplayName: fromDisplayName || fromUsername || "guest",
       toUsername: toUsername || "guest",
       message,
-      time: new Date().toISOString()
+      time: new Date().toISOString(),
+      read: false
     };
 
     db.dmMessages.push(dm);
