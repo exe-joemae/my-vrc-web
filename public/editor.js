@@ -1,3 +1,8 @@
+// ===============================
+//  editor.js
+//  高機能ルームエディタ
+// ===============================
+
 const editorOverlay = document.getElementById("editor-overlay");
 const editorClose = document.getElementById("editor-close");
 
@@ -35,16 +40,25 @@ let editorSessionToken = null;
 let editorRoomData = null;
 let editorSelectedObject = null;
 
+// ===============================
+// エディタを開く
+// ===============================
 window.editorOpen = function (roomId, sessionToken) {
   editorRoomId = roomId;
   editorSessionToken = sessionToken;
   editorOverlay.classList.remove("hidden");
 };
 
+// ===============================
+// エディタを閉じる
+// ===============================
 editorClose.onclick = () => {
   editorOverlay.classList.add("hidden");
 };
 
+// ===============================
+// ルームデータを読み込む
+// ===============================
 window.editorLoadRoom = function (roomId, room) {
   if (editorRoomId === roomId) {
     editorRoomData = JSON.parse(JSON.stringify(room));
@@ -52,6 +66,9 @@ window.editorLoadRoom = function (roomId, room) {
   }
 };
 
+// ===============================
+// エディタUIへ反映
+// ===============================
 function applyEditorRoom() {
   if (!editorRoomData) return;
 
@@ -75,6 +92,9 @@ function applyEditorRoom() {
   clearSelectedObject();
 }
 
+// ===============================
+// 選択解除
+// ===============================
 function clearSelectedObject() {
   editorSelectedObject = null;
   selectedObjectIdLabel.textContent = "-";
@@ -91,10 +111,14 @@ function clearSelectedObject() {
   objColorInput.value = "#ffffff";
 }
 
+// ===============================
+// オブジェクト選択
+// ===============================
 function selectObject(id) {
   const obj = editorRoomData.objects.find((o) => o.id === id);
   if (!obj) return;
   editorSelectedObject = obj;
+
   selectedObjectIdLabel.textContent = obj.id;
   objTypeSelect.value = obj.type;
   objPosXInput.value = obj.position.x;
@@ -109,6 +133,9 @@ function selectObject(id) {
   objColorInput.value = obj.color || "#ffffff";
 }
 
+// ===============================
+// オブジェクト追加
+// ===============================
 function addObject(type) {
   const id = "obj_" + Math.random().toString(36).slice(2);
   const obj = {
@@ -126,8 +153,12 @@ function addObject(type) {
 addBoxBtn.onclick = () => addObject("box");
 addSphereBtn.onclick = () => addObject("sphere");
 
+// ===============================
+// オブジェクト編集適用
+// ===============================
 objApplyBtn.onclick = () => {
   if (!editorSelectedObject) return;
+
   editorSelectedObject.type = objTypeSelect.value;
   editorSelectedObject.position = {
     x: parseFloat(objPosXInput.value || "0"),
@@ -149,6 +180,9 @@ objApplyBtn.onclick = () => {
   applyEditorRoom();
 };
 
+// ===============================
+// オブジェクト削除
+// ===============================
 objDeleteBtn.onclick = () => {
   if (!editorSelectedObject) return;
   editorRoomData.objects = editorRoomData.objects.filter(
@@ -157,7 +191,9 @@ objDeleteBtn.onclick = () => {
   applyEditorRoom();
 };
 
-// 保存
+// ===============================
+// ルーム保存
+// ===============================
 editorSaveBtn.onclick = async () => {
   if (!editorRoomId || !editorSessionToken || !editorRoomData) return;
 
