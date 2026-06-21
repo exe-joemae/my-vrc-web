@@ -6,18 +6,23 @@ const url = new URL(window.location.href);
 const currentRoom = url.searchParams.get("room") || "lobby";
 roomInput.value = currentRoom;
 
-// --- A-Frame エンティティ参照 ---
+// --- A-Frame エンティティ ---
 const playerRoot = document.getElementById("playerRoot");
 const playerCamera = document.getElementById("playerCamera");
+const playerAvatar = document.getElementById("playerAvatar");
+const ground = document.getElementById("ground");
+const box1 = document.getElementById("box1");
 
-// --- 移動・重力用の状態 ---
+// --- 移動・重力 ---
 let velocity = { x: 0, y: 0, z: 0 };
-const GRAVITY = -9.8; // m/s^2
-const MOVE_SPEED = 4; // m/s
-const JUMP_SPEED = 5; // 使いたければ
+const GRAVITY = -9.8;
+const MOVE_SPEED = 4;
 let keys = {};
-let yaw = 0; // 左右回転
-let pitch = 0; // 上下回転（必要なら）
+let yaw = 0;
+let pitch = 0;
+
+// --- アバター色（同期用） ---
+let avatarColor = "#FFAA00";
 
 // キー入力
 window.addEventListener("keydown", (e) => {
@@ -87,11 +92,17 @@ function connectWS(room) {
           "geometry",
           "primitive: box; height: 1.6; width: 0.5; depth: 0.5"
         );
-        e.setAttribute("material", "color: #00AAFF");
+        e.setAttribute(
+          "material",
+          `color: ${data.avatarColor || "#00AAFF"}`
+        );
         e.setAttribute("position", "0 0 0");
         document.querySelector("a-scene").appendChild(e);
       }
       e.setAttribute("position", data.pos);
+      if (data.avatarColor) {
+        e.setAttribute("material", `color: ${data.avatarColor}`);
+      }
     }
   };
 }
@@ -196,6 +207,124 @@ async function createPeerConnection(peerId, isCaller) {
   return pc;
 }
 
+// --- スマホUI制御 ---
+const phone = document.getElementById("phone");
+const phoneClose = document.getElementById("phone-close");
+const phoneTabs = document.querySelectorAll("#phone-tabs button");
+const phoneKeyInput = document.getElementById("phoneKeyInput");
+const phoneKeySave = document.getElementById("phoneKeySave");
+const phoneKeyLabel = document.getElementById("phoneKeyLabel");
+
+let phoneKey = "p"; // デフォルト P キー
+
+function setPhoneKeyLabel() {
+  phoneKeyLabel.textContent = phoneKey.toUpperCase();
+}
+setPhoneKeyLabel();
+
+function openPhone() {
+  phone.classList.remove("hidden");
+}
+function closePhone() {
+  phone.classList.add("hidden");
+}
+
+phoneClose.onclick = closePhone;
+
+phoneTabs.forEach((btn) => {
+  btn.onclick = () => {
+    const tabId = btn.dataset.tab;
+    document
+      .querySelectorAll(".phone-tab")
+      .forEach((tab) => tab.classList.add("hidden"));
+    document
+      .getElementById(`tab-${tabId}`)
+      .classList.remove("hidden");
+  };
+});
+
+// スマホキー設定保存
+phoneKeySave.onclick = () => {
+  const v = phoneKeyInput.value.trim().toLowerCase();
+  if (!v || v.length !== 1) {
+    alert("1文字のキーを入力してね");
+    return;
+  }
+  phoneKey = v;
+  setPhoneKeyLabel();
+  alert(`スマホキーを "${phoneKey.toUpperCase()}" に変更しました`);
+};
+
+// スマホ開閉キー
+window.addEventListener("keydown", (e) => {
+  if (e.key.toLowerCase() === phoneKey) {
+    if (phone.classList.contains("hidden")) {
+      openPhone();
+    } else {
+      closePhone();
+    }
+  }
+});
+
+// --- ルーム模様替え（スマホ） ---
+const roomGroundColorInput = document.getElementById("roomGroundColor");
+const roomBoxColorInput = document.getElementById("roomBoxColor");
+const roomApplyBtn = document.getElementById("roomApply");
+
+roomApplyBtn.onclick = () => {
+  const gColor = roomGroundColorInput.value || "#7BC8A4";
+  const bColor = roomBoxColorInput.value || "#4CC3D9";
+  ground.setAttribute("color", gColor);
+  box1.setAttribute("color", bColor);
+};
+
+// --- アバター設定（スマホ） ---
+const avatarColorInput = document.getElementById("avatarColorInput");
+const avatarApplyBtn = document.getElementById("avatarApply");
+
+avatarApplyBtn.onclick = () => {
+  avatarColor = avatarColorInput.value || "#FFAA00";
+  playerAvatar.setAttribute("material", `color: ${avatarColor}`);
+};
+
+// --- DM（スマホ） ---
+const dmToInput = document.getElementById("dm-to");
+const dmTextInput = document.getElementById("dm-text");
+const dmSendBtn = document.getElementById("dm-send");
+const dmLog = document.getElementById("dm-log");
+
+dmSendBtn.onclick = () => {
+  const toSocketId = dmToInput.value.trim();
+  const message = dmTextInput.value.trim();
+  if (!toSocketId || !message) return;
+
+  socket.emit("dm-send", { toSocketId, message });
+
+  addDmLog("自分 → " + toSocketId, message);
+  dmTextInput.value = "";
+};
+
+socket.on("dm-receive", ({ from, message }) => {
+  addDmLog("受信 ← " + from, message);
+});
+
+function addDmLog(fromLabel, text) {
+  const div = document.createElement("div");
+  div.className = "dm-item";
+
+  const fromEl = document.createElement("div");
+  fromEl.className = "dm-from";
+  fromEl.textContent = fromLabel;
+
+  const textEl = document.createElement("div");
+  textEl.className = "dm-text";
+  textEl.textContent = text;
+
+  div.appendChild(fromEl);
+  div.appendChild(textEl);
+  dmLog.prepend(div);
+}
+
 // --- 毎フレーム更新（重力＋移動＋視点回転＋位置同期） ---
 let lastTime = performance.now();
 
@@ -211,11 +340,11 @@ function tick() {
 function updateMovement(dt) {
   const pos = playerRoot.getAttribute("position");
 
-  // 視点回転を反映
+  // 視点回転
   playerRoot.setAttribute("rotation", `0 ${yaw} 0`);
   playerCamera.setAttribute("rotation", `${pitch} 0 0`);
 
-  // 入力から移動方向を決定（ローカル座標）
+  // 入力から移動方向
   let inputX = 0;
   let inputZ = 0;
   if (keys["w"]) inputZ -= 1;
@@ -223,14 +352,12 @@ function updateMovement(dt) {
   if (keys["a"]) inputX -= 1;
   if (keys["d"]) inputX += 1;
 
-  // 正規化
   const len = Math.hypot(inputX, inputZ);
   if (len > 0) {
     inputX /= len;
     inputZ /= len;
   }
 
-  // yaw に合わせてワールド座標へ
   const rad = (yaw * Math.PI) / 180;
   const forwardX = -Math.sin(rad);
   const forwardZ = -Math.cos(rad);
@@ -246,7 +373,7 @@ function updateMovement(dt) {
   // 重力
   velocity.y += GRAVITY * dt;
 
-  // 地面との当たり判定（y=0 を地面とする）
+  // 地面との当たり判定
   let newY = pos.y + velocity.y * dt;
   if (newY < 1) {
     newY = 1;
@@ -262,12 +389,13 @@ function updateMovement(dt) {
     z: newZ
   });
 
-  // 位置同期（100msごとに送るのでもOKだが、ここでは簡単に毎フレーム）
+  // 位置同期
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(
       JSON.stringify({
         type: "move",
-        pos: { x: newX, y: newY, z: newZ }
+        pos: { x: newX, y: newY, z: newZ },
+        avatarColor
       })
     );
   }
