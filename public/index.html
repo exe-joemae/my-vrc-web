@@ -2,38 +2,69 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Cyber VRC (Accounts)</title>
+    <title>Cyber VRC - Login & Editor</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- 左上HUD -->
-    <div id="ui" class="cyber-panel">
+    <!-- ログイン画面 -->
+    <div id="login-overlay" class="login-overlay">
+      <div class="login-panel">
+        <h2>CYBER VRC</h2>
+        <div class="login-tabs">
+          <button data-mode="login" class="login-tab-btn active">ログイン</button>
+          <button data-mode="register" class="login-tab-btn">新規登録</button>
+        </div>
+        <div class="login-body">
+          <label>ユーザー名</label>
+          <input id="login-username" />
+          <label>パスワード</label>
+          <input id="login-password" type="password" />
+          <label id="login-displayName-label" class="hidden">表示名</label>
+          <input id="login-displayName" class="hidden" />
+          <button id="login-submit" class="cyber-btn accent">送信</button>
+          <div id="login-message" class="small-text"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="ui" class="cyber-panel hidden">
       <div class="cyber-title">CYBER VRC</div>
 
       <div id="account-ui" class="cyber-block">
-        <label>ユーザー名 (ID)</label>
-        <input id="username" placeholder="username" />
-        <label>表示名</label>
-        <input id="displayName" placeholder="表示名" />
         <div class="small-text">
-          Socket ID: <span id="socketIdLabel">-</span>
+          ログイン中: <span id="label-username">-</span> /
+          <span id="label-displayName">-</span>
         </div>
-        <button id="accountSaveBtn" class="cyber-btn">サーバに保存</button>
-        <button id="accountLoadBtn" class="cyber-btn">サーバからロード</button>
+        <label>表示名</label>
+        <input id="displayName" />
+        <label>アバター色</label>
+        <input id="avatarColorInput" type="color" value="#FFAA00" />
+        <label>スマホキー</label>
+        <input id="phoneKeyInput" maxlength="1" />
+        <button id="accountUpdateBtn" class="cyber-btn">更新</button>
       </div>
 
       <div id="room-ui" class="cyber-block">
         <label>Room ID</label>
         <input id="roomId" placeholder="Room ID" />
-        <button id="joinRoomBtn" class="cyber-btn">Join / Create</button>
+        <button id="joinRoomBtn" class="cyber-btn">Join</button>
+        <button id="createRoomBtn" class="cyber-btn">Create & Own</button>
+        <div class="small-text">
+          所有ルーム一覧:
+          <div id="myRoomsList" class="cyber-scroll"></div>
+        </div>
       </div>
 
       <div id="voice-ui" class="cyber-block">
         <button id="startVoiceBtn" class="cyber-btn accent">
           音声チャット開始
         </button>
+        <div class="small-text">
+          Socket ID: <span id="socketIdLabel">-</span>
+        </div>
       </div>
 
       <div id="sns-ui" class="cyber-block">
@@ -46,6 +77,12 @@
       <div id="phone-hint" class="cyber-block small-text">
         PHONE KEY: <span id="phoneKeyLabel">P</span>
       </div>
+
+      <div id="editor-toggle" class="cyber-block">
+        <button id="openEditorBtn" class="cyber-btn accent">
+          ルームエディタを開く
+        </button>
+      </div>
     </div>
 
     <!-- スマホUI -->
@@ -55,64 +92,12 @@
         <button id="phone-close" class="phone-close">×</button>
       </div>
       <div id="phone-tabs" class="phone-tabs">
-        <button data-tab="settings" class="phone-tab-btn">設定</button>
-        <button data-tab="account" class="phone-tab-btn">アカウント</button>
-        <button data-tab="room" class="phone-tab-btn">ルーム</button>
-        <button data-tab="avatar" class="phone-tab-btn">アバター</button>
         <button data-tab="sns" class="phone-tab-btn">SNS</button>
         <button data-tab="dm" class="phone-tab-btn">DM</button>
       </div>
       <div id="phone-content" class="phone-content">
-        <!-- 設定タブ -->
-        <div class="phone-tab" id="tab-settings">
-          <h4>設定</h4>
-          <label>
-            スマホキー:
-            <input id="phoneKeyInput" placeholder="例: P" maxlength="1" />
-          </label>
-          <button id="phoneKeySave" class="cyber-btn">保存</button>
-        </div>
-
-        <!-- アカウントタブ -->
-        <div class="phone-tab hidden" id="tab-account">
-          <h4>アカウント</h4>
-          <label>
-            ユーザー名:
-            <input id="phoneUsername" placeholder="username" />
-          </label>
-          <label>
-            表示名:
-            <input id="phoneDisplayName" placeholder="表示名" />
-          </label>
-          <button id="phoneAccountApply" class="cyber-btn">適用</button>
-        </div>
-
-        <!-- ルーム模様替えタブ -->
-        <div class="phone-tab hidden" id="tab-room">
-          <h4>ルーム模様替え</h4>
-          <label>
-            地面の色:
-            <input id="roomGroundColor" type="color" value="#7BC8A4" />
-          </label>
-          <label>
-            ボックスの色:
-            <input id="roomBoxColor" type="color" value="#4CC3D9" />
-          </label>
-          <button id="roomApply" class="cyber-btn">適用</button>
-        </div>
-
-        <!-- アバター設定タブ -->
-        <div class="phone-tab hidden" id="tab-avatar">
-          <h4>アバター設定</h4>
-          <label>
-            アバター色:
-            <input id="avatarColorInput" type="color" value="#FFAA00" />
-          </label>
-          <button id="avatarApply" class="cyber-btn">適用</button>
-        </div>
-
-        <!-- SNSタブ（スマホ版） -->
-        <div class="phone-tab hidden" id="tab-sns">
+        <!-- SNSタブ -->
+        <div class="phone-tab" id="tab-sns">
           <h4>SNS</h4>
           <div id="phone-sns-feed" class="cyber-scroll"></div>
           <input id="phone-sns-text" placeholder="メッセージ" />
@@ -123,16 +108,12 @@
         <div class="phone-tab hidden" id="tab-dm">
           <h4>DM</h4>
           <div class="small-text">
-            宛先ユーザー名を指定してメッセージを送信します。
+            宛先ユーザー名と Socket ID を指定して送信。
           </div>
-          <label>
-            宛先ユーザー名:
-            <input id="dm-to-username" placeholder="相手の username" />
-          </label>
-          <label>
-            宛先 Socket ID:
-            <input id="dm-to-socket" placeholder="相手の Socket ID" />
-          </label>
+          <label>宛先ユーザー名</label>
+          <input id="dm-to-username" />
+          <label>宛先 Socket ID</label>
+          <input id="dm-to-socket" />
           <div id="dm-log" class="cyber-scroll"></div>
           <input id="dm-text" placeholder="メッセージ" />
           <button id="dm-send" class="cyber-btn">送信</button>
@@ -140,23 +121,80 @@
       </div>
     </div>
 
+    <!-- 高機能ルームエディタ -->
+    <div id="editor-overlay" class="editor-overlay hidden">
+      <div class="editor-panel">
+        <div class="editor-header">
+          <span>ROOM EDITOR</span>
+          <button id="editor-close" class="editor-close">×</button>
+        </div>
+        <div class="editor-body">
+          <div class="editor-section">
+            <h4>環境</h4>
+            <label>Sky Color</label>
+            <input id="env-skyColor" type="color" value="#000022" />
+            <label>Fog Color</label>
+            <input id="env-fogColor" type="color" value="#000000" />
+            <label>Fog Density</label>
+            <input id="env-fogDensity" type="number" step="0.001" value="0.02" />
+            <label>Ambient Color</label>
+            <input id="env-ambientColor" type="color" value="#ffffff" />
+          </div>
+
+          <div class="editor-section">
+            <h4>範囲</h4>
+            <label>Width</label>
+            <input id="bounds-width" type="number" value="50" />
+            <label>Depth</label>
+            <input id="bounds-depth" type="number" value="50" />
+          </div>
+
+          <div class="editor-section">
+            <h4>オブジェクト一覧</h4>
+            <div id="objects-list" class="cyber-scroll"></div>
+            <button id="addBoxBtn" class="cyber-btn">Box追加</button>
+            <button id="addSphereBtn" class="cyber-btn">Sphere追加</button>
+          </div>
+
+          <div class="editor-section">
+            <h4>選択オブジェクト編集</h4>
+            <div class="small-text">ID: <span id="selected-object-id">-</span></div>
+            <label>Type</label>
+            <select id="obj-type">
+              <option value="box">box</option>
+              <option value="sphere">sphere</option>
+            </select>
+            <label>Position (x,y,z)</label>
+            <input id="obj-pos-x" type="number" step="0.1" />
+            <input id="obj-pos-y" type="number" step="0.1" />
+            <input id="obj-pos-z" type="number" step="0.1" />
+            <label>Rotation (x,y,z)</label>
+            <input id="obj-rot-x" type="number" step="1" />
+            <input id="obj-rot-y" type="number" step="1" />
+            <input id="obj-rot-z" type="number" step="1" />
+            <label>Scale (x,y,z)</label>
+            <input id="obj-scale-x" type="number" step="0.1" />
+            <input id="obj-scale-y" type="number" step="0.1" />
+            <input id="obj-scale-z" type="number" step="0.1" />
+            <label>Color</label>
+            <input id="obj-color" type="color" />
+            <button id="obj-apply" class="cyber-btn">適用</button>
+            <button id="obj-delete" class="cyber-btn">削除</button>
+          </div>
+
+          <div class="editor-section">
+            <button id="editor-save" class="cyber-btn accent">
+              ルームをサーバに保存
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 3Dシーン -->
     <a-scene id="scene">
-      <a-assets>
-        <template id="avatar-template">
-          <a-entity>
-            <a-sphere radius="0.25" color="#FFC65D" position="0 1.6 0"></a-sphere>
-            <a-cylinder
-              radius="0.25"
-              height="1.2"
-              color="#4CC3D9"
-              position="0 0.8 0"
-            ></a-cylinder>
-          </a-entity>
-        </template>
-      </a-assets>
+      <a-assets></a-assets>
 
-      <!-- 自分のアバター＋ネームタグ -->
       <a-entity id="playerRoot" position="0 1 0">
         <a-entity
           id="playerCamera"
@@ -177,7 +215,6 @@
         ></a-entity>
       </a-entity>
 
-      <!-- 地面とオブジェクト -->
       <a-plane
         id="ground"
         position="0 0 0"
@@ -187,11 +224,12 @@
         color="#7BC8A4"
       ></a-plane>
 
-      <a-box id="box1" position="0 0.5 -3" color="#4CC3D9"></a-box>
-      <a-sphere position="2 1 -3" radius="1" color="#EF2D5E"></a-sphere>
+      <a-entity id="env-light" light="type: ambient; color: #FFFFFF"></a-entity>
+      <a-sky id="env-sky" color="#000022"></a-sky>
     </a-scene>
 
     <script src="client.js"></script>
+    <script src="editor.js"></script>
     <script src="sns.js"></script>
   </body>
 </html>
