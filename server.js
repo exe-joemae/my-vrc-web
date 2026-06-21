@@ -14,19 +14,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 /**
- * 簡易メモリDB
- * users: username -> { username, passwordHash, displayName, avatarColor, phoneKey }
- * rooms: roomId -> {
- *   owner: username,
- *   name: string,
- *   environment: { skyColor, fogColor, fogDensity, ambientColor },
- *   bounds: { width, depth },
- *   objects: [
- *     { id, type, position:{x,y,z}, rotation:{x,y,z}, scale:{x,y,z}, color, modelUrl? }
- *   ]
- * }
- * snsMessages: [{ userDisplayName, text, time }]
- * dmMessages: [{ fromUsername, fromDisplayName, toUsername, message, time, read }]
+ * メモリDB
  */
 const db = {
   users: {},
@@ -35,12 +23,40 @@ const db = {
   dmMessages: []
 };
 
-// パスワードハッシュ（デモ用）
+/**
+ * パスワードハッシュ
+ */
 function hashPassword(password) {
   return crypto.createHash("sha256").update(password).digest("hex");
 }
 
-// --- 認証API ---
+/**
+ * ロビー自動生成
+ */
+function ensureLobby() {
+  if (!db.rooms["lobby"]) {
+    db.rooms["lobby"] = {
+      owner: "system",
+      name: "Lobby",
+      environment: {
+        skyColor: "#000022",
+        fogColor: "#000000",
+        fogDensity: 0.02,
+        ambientColor: "#FFFFFF"
+      },
+      bounds: {
+        width: 50,
+        depth: 50
+      },
+      objects: []
+    };
+  }
+}
+ensureLobby();
+
+/**
+ * 認証API
+ */
 
 // 新規登録
 app.post("/api/register", (req, res) => {
@@ -57,7 +73,8 @@ app.post("/api/register", (req, res) => {
     passwordHash: hashPassword(password),
     displayName: displayName || username,
     avatarColor: "#FFAA00",
-    phoneKey: "p"
+    phoneKey: "p",
+    sessionToken: null
   };
 
   res.json({ ok: true });
@@ -69,6 +86,7 @@ app.post("/api/login", (req, res) => {
   if (!username || !password) {
     return res.status(400).json({ error: "username and password required" });
   }
+
   const user = db.users[username];
   if (!user) {
     return res.status(400).json({ error: "user not found" });
@@ -77,7 +95,6 @@ app.post("/api/login", (req, res) => {
     return res.status(400).json({ error: "invalid password" });
   }
 
-  // 超簡易トークン（デモ用）
   const token = crypto.randomBytes(16).toString("hex");
   user.sessionToken = token;
 
@@ -93,7 +110,7 @@ app.post("/api/login", (req, res) => {
   });
 });
 
-// ユーザー情報取得
+// セッションユーザー取得
 app.get("/api/me", (req, res) => {
   const token = req.headers["x-session-token"];
   const user = Object.values(db.users).find((u) => u.sessionToken === token);
@@ -110,7 +127,7 @@ app.get("/api/me", (req, res) => {
   });
 });
 
-// ユーザー設定更新（表示名・アバター色・スマホキー）
+// ユーザー設定更新
 app.post("/api/updateUser", (req, res) => {
   const token = req.headers["x-session-token"];
   const user = Object.values(db.users).find((u) => u.sessionToken === token);
@@ -124,7 +141,9 @@ app.post("/api/updateUser", (req, res) => {
   res.json({ ok: true });
 });
 
-// --- ルームAPI（所有者のみ編集） ---
+/**
+ * ルームAPI
+ */
 
 // 自分のルーム一覧
 app.get("/api/myRooms", (req, res) => {
@@ -184,7 +203,7 @@ app.get("/api/getRoom/:roomId", (req, res) => {
   res.json({ ok: true, room });
 });
 
-// ルーム更新（環境＋オブジェクト＋範囲）
+// ルーム更新
 app.post("/api/updateRoom/:roomId", (req, res) => {
   const token = req.headers["x-session-token"];
   const user = Object.values(db.users).find((u) => u.sessionToken === token);
@@ -205,12 +224,16 @@ app.post("/api/updateRoom/:roomId", (req, res) => {
   res.json({ ok: true, room });
 });
 
-// --- SNS履歴取得 ---
+/**
+ * SNS / DM
+ */
+
+// SNS履歴
 app.get("/api/snsHistory", (req, res) => {
   res.json({ ok: true, messages: db.snsMessages });
 });
 
-// --- DM履歴取得（自分宛） ---
+// DM履歴
 app.get("/api/dmHistory", (req, res) => {
   const token = req.headers["x-session-token"];
   const user = Object.values(db.users).find((u) => u.sessionToken === token);
@@ -222,7 +245,10 @@ app.get("/api/dmHistory", (req, res) => {
   res.json({ ok: true, messages });
 });
 
-// --- 位置同期（ルームごとの簡易VRC） ---
+/**
+ * WebSocket（位置同期）
+ */
+
 let wsClients = new Map(); // ws -> { id, room, username }
 
 wss.on("connection", (ws, req) => {
@@ -246,6 +272,7 @@ wss.on("connection", (ws, req) => {
         avatarColor: data.avatarColor || "#00AAFF"
       };
 
+      // マップ用に位置も送る
       for (const [client, info] of wsClients) {
         if (client !== ws && info.room === me.room) {
           client.send(
@@ -253,8 +280,9 @@ wss.on("connection", (ws, req) => {
               type: "spawn",
               id: me.id,
               pos: data.pos,
-              avatarColor: data.avatarColor || user.avatarColor || "#00AAFF",
-              displayName: user.displayName || me.username
+              avatarColor: data.avatarColor || user.avatarColor,
+              displayName: user.displayName,
+              mapPos: data.pos
             })
           );
         }
@@ -265,7 +293,9 @@ wss.on("connection", (ws, req) => {
   ws.on("close", () => wsClients.delete(ws));
 });
 
-// --- 音声チャット＋SNS＋DM ---
+/**
+ * Socket.IO（音声 / SNS / DM）
+ */
 io.on("connection", (socket) => {
   socket.on("join-room", (payload) => {
     const { roomId, username } = payload || {};
@@ -281,7 +311,7 @@ io.on("connection", (socket) => {
     socket.emit("dm-history", myDm);
   });
 
-  // WebRTC シグナリング
+  // WebRTC
   socket.on("signal", (payload) => {
     const { to, data } = payload;
     io.to(to).emit("signal", { from: socket.id, data });
@@ -293,7 +323,7 @@ io.on("connection", (socket) => {
     cb(peers);
   });
 
-  // SNS投稿
+  // SNS
   socket.on("sns-post", (post) => {
     const msg = {
       userDisplayName: post.userDisplayName || "名無し",
@@ -304,7 +334,7 @@ io.on("connection", (socket) => {
     io.emit("sns-feed", msg);
   });
 
-  // DM送信
+  // DM
   socket.on("dm-send", (payload) => {
     const {
       toSocketId,
@@ -315,8 +345,8 @@ io.on("connection", (socket) => {
     } = payload;
 
     const dm = {
-      fromUsername: fromUsername || socket.username || "guest",
-      fromDisplayName: fromDisplayName || fromUsername || "guest",
+      fromUsername: fromUsername || socket.username,
+      fromDisplayName: fromDisplayName || fromUsername,
       toUsername: toUsername || "guest",
       message,
       time: new Date().toISOString(),
