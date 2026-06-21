@@ -2,12 +2,13 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Web VRC with Gravity, Avatar, Voice & SNS</title>
+    <title>Web VRC with Phone UI</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
+    <!-- 画面左上の基本UI -->
     <div id="ui">
       <div id="room-ui">
         <input id="roomId" placeholder="Room ID" />
@@ -25,9 +26,88 @@
         <input id="sns-text" placeholder="メッセージ" />
         <button id="sns-send">投稿</button>
       </div>
+
+      <div id="phone-hint">
+        スマホキー: <span id="phoneKeyLabel">P</span> で開閉
+      </div>
     </div>
 
+    <!-- スマホUI -->
+    <div id="phone" class="hidden">
+      <div id="phone-header">
+        <span>スマホ</span>
+        <button id="phone-close">×</button>
+      </div>
+      <div id="phone-tabs">
+        <button data-tab="settings">設定</button>
+        <button data-tab="room">ルーム模様替え</button>
+        <button data-tab="avatar">アバター設定</button>
+        <button data-tab="sns">SNS</button>
+        <button data-tab="dm">DM</button>
+      </div>
+      <div id="phone-content">
+        <!-- 設定タブ -->
+        <div class="phone-tab" id="tab-settings">
+          <h4>設定</h4>
+          <label>
+            スマホを開くキー:
+            <input id="phoneKeyInput" placeholder="例: P" maxlength="1" />
+          </label>
+          <button id="phoneKeySave">保存</button>
+        </div>
+
+        <!-- ルーム模様替えタブ -->
+        <div class="phone-tab hidden" id="tab-room">
+          <h4>ルーム模様替え</h4>
+          <label>
+            地面の色:
+            <input id="roomGroundColor" type="color" value="#7BC8A4" />
+          </label>
+          <label>
+            ボックスの色:
+            <input id="roomBoxColor" type="color" value="#4CC3D9" />
+          </label>
+          <button id="roomApply">適用</button>
+        </div>
+
+        <!-- アバター設定タブ -->
+        <div class="phone-tab hidden" id="tab-avatar">
+          <h4>アバター設定</h4>
+          <label>
+            アバター色:
+            <input id="avatarColorInput" type="color" value="#FFAA00" />
+          </label>
+          <button id="avatarApply">適用</button>
+        </div>
+
+        <!-- SNSタブ（スマホ版） -->
+        <div class="phone-tab hidden" id="tab-sns">
+          <h4>SNS（スマホ版）</h4>
+          <div id="phone-sns-feed"></div>
+          <input id="phone-sns-name" placeholder="名前" />
+          <input id="phone-sns-text" placeholder="メッセージ" />
+          <button id="phone-sns-send">投稿</button>
+        </div>
+
+        <!-- DMタブ -->
+        <div class="phone-tab hidden" id="tab-dm">
+          <h4>DM</h4>
+          <div>
+            <label>
+              宛先 Socket ID:
+              <input id="dm-to" placeholder="相手の Socket ID" />
+            </label>
+          </div>
+          <div id="dm-log"></div>
+          <input id="dm-text" placeholder="メッセージ" />
+          <button id="dm-send">送信</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3Dシーン -->
     <a-scene id="scene">
+      <!-- 仮アバター用テンプレ -->
       <a-assets>
         <template id="avatar-template">
           <a-entity>
@@ -42,7 +122,7 @@
         </template>
       </a-assets>
 
-      <!-- 仮アバター（自分） -->
+      <!-- 自分のアバター -->
       <a-entity id="playerRoot" position="0 1 0">
         <a-entity
           id="playerCamera"
@@ -58,10 +138,9 @@
         ></a-entity>
       </a-entity>
 
-      <!-- 他プレイヤーは client.js で生成 -->
-
-      <!-- 地面 -->
+      <!-- 地面とオブジェクト（模様替え対象） -->
       <a-plane
+        id="ground"
         position="0 0 0"
         rotation="-90 0 0"
         width="50"
@@ -69,8 +148,7 @@
         color="#7BC8A4"
       ></a-plane>
 
-      <!-- 適当なオブジェクト -->
-      <a-box position="0 0.5 -3" color="#4CC3D9"></a-box>
+      <a-box id="box1" position="0 0.5 -3" color="#4CC3D9"></a-box>
       <a-sphere position="2 1 -3" radius="1" color="#EF2D5E"></a-sphere>
     </a-scene>
 
