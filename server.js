@@ -32,7 +32,8 @@ wss.on("connection", (ws, req) => {
             JSON.stringify({
               type: "spawn",
               id: me.id,
-              pos: data.pos
+              pos: data.pos,
+              avatarColor: data.avatarColor || "#00AAFF"
             })
           );
         }
@@ -43,13 +44,14 @@ wss.on("connection", (ws, req) => {
   ws.on("close", () => wsClients.delete(ws));
 });
 
-// --- 音声チャット（WebRTC シグナリング） ---
+// --- 音声チャット（WebRTC シグナリング）＋SNS＋DM ---
 io.on("connection", (socket) => {
   socket.on("join-room", (roomId) => {
     socket.join(roomId);
     socket.roomId = roomId;
   });
 
+  // WebRTC シグナリング
   socket.on("signal", (payload) => {
     const { to, data } = payload;
     io.to(to).emit("signal", { from: socket.id, data });
@@ -61,9 +63,18 @@ io.on("connection", (socket) => {
     cb(peers);
   });
 
-  // --- 全ルーム共通SNS ---
+  // 全ルーム共通SNS
   socket.on("sns-post", (post) => {
     io.emit("sns-feed", post);
+  });
+
+  // DM（1対1）
+  socket.on("dm-send", (payload) => {
+    const { toSocketId, message } = payload;
+    io.to(toSocketId).emit("dm-receive", {
+      from: socket.id,
+      message
+    });
   });
 });
 
