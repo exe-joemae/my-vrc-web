@@ -2,22 +2,26 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Cyber VRC</title>
+    <title>Cyber VRC (Accounts)</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- 左上HUD（サイバー風） -->
+    <!-- 左上HUD -->
     <div id="ui" class="cyber-panel">
       <div class="cyber-title">CYBER VRC</div>
 
       <div id="account-ui" class="cyber-block">
-        <label>アカウント名</label>
-        <input id="accountName" placeholder="名前" />
+        <label>ユーザー名 (ID)</label>
+        <input id="username" placeholder="username" />
+        <label>表示名</label>
+        <input id="displayName" placeholder="表示名" />
         <div class="small-text">
           Socket ID: <span id="socketIdLabel">-</span>
         </div>
+        <button id="accountSaveBtn" class="cyber-btn">サーバに保存</button>
+        <button id="accountLoadBtn" class="cyber-btn">サーバからロード</button>
       </div>
 
       <div id="room-ui" class="cyber-block">
@@ -35,7 +39,6 @@
       <div id="sns-ui" class="cyber-block">
         <div class="block-title">GLOBAL FEED</div>
         <div id="sns-feed" class="cyber-scroll"></div>
-        <input id="sns-name" placeholder="名前" />
         <input id="sns-text" placeholder="メッセージ" />
         <button id="sns-send" class="cyber-btn">投稿</button>
       </div>
@@ -45,7 +48,7 @@
       </div>
     </div>
 
-    <!-- スマホUI（サイバー風） -->
+    <!-- スマホUI -->
     <div id="phone" class="phone hidden">
       <div id="phone-header" class="phone-header">
         <span>NEO DEVICE</span>
@@ -68,24 +71,18 @@
             <input id="phoneKeyInput" placeholder="例: P" maxlength="1" />
           </label>
           <button id="phoneKeySave" class="cyber-btn">保存</button>
-          <hr />
-          <button id="saveAllBtn" class="cyber-btn accent">
-            全設定をセーブ
-          </button>
-          <button id="loadAllBtn" class="cyber-btn">
-            セーブデータをロード
-          </button>
         </div>
 
         <!-- アカウントタブ -->
         <div class="phone-tab hidden" id="tab-account">
           <h4>アカウント</h4>
-          <p class="small-text">
-            上のHUDと同じアカウント名が使われます（DM・ネームタグ用）。
-          </p>
           <label>
-            アカウント名:
-            <input id="phoneAccountName" placeholder="名前" />
+            ユーザー名:
+            <input id="phoneUsername" placeholder="username" />
+          </label>
+          <label>
+            表示名:
+            <input id="phoneDisplayName" placeholder="表示名" />
           </label>
           <button id="phoneAccountApply" class="cyber-btn">適用</button>
         </div>
@@ -118,7 +115,6 @@
         <div class="phone-tab hidden" id="tab-sns">
           <h4>SNS</h4>
           <div id="phone-sns-feed" class="cyber-scroll"></div>
-          <input id="phone-sns-name" placeholder="名前" />
           <input id="phone-sns-text" placeholder="メッセージ" />
           <button id="phone-sns-send" class="cyber-btn">投稿</button>
         </div>
@@ -127,11 +123,15 @@
         <div class="phone-tab hidden" id="tab-dm">
           <h4>DM</h4>
           <div class="small-text">
-            宛先 Socket ID を指定してメッセージを送信します。
+            宛先ユーザー名を指定してメッセージを送信します。
           </div>
           <label>
+            宛先ユーザー名:
+            <input id="dm-to-username" placeholder="相手の username" />
+          </label>
+          <label>
             宛先 Socket ID:
-            <input id="dm-to" placeholder="相手の Socket ID" />
+            <input id="dm-to-socket" placeholder="相手の Socket ID" />
           </label>
           <div id="dm-log" class="cyber-scroll"></div>
           <input id="dm-text" placeholder="メッセージ" />
