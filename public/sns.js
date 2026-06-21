@@ -11,7 +11,7 @@ const phoneSnsSend = document.getElementById("phone-sns-send");
 // client.js で window.socket に入れてある
 const snsSocket = window.socket || io();
 
-// PC版SNS投稿
+// HUD版SNS投稿
 snsSend.onclick = () => {
   const user = snsName.value.trim() || "名無し";
   const text = snsText.value.trim();
