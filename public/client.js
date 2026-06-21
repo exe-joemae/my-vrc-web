@@ -1,3 +1,12 @@
+// ===============================
+//  client.js (1/3)
+//  - ログイン後の初期化
+//  - キー入力
+//  - 移動（前後逆転）
+//  - ジャンプ追加
+//  - WebSocket同期
+// ===============================
+
 // グローバル状態
 let sessionToken = null;
 let currentUser = null;
@@ -6,12 +15,15 @@ let currentRoomId = "lobby";
 let avatarColor = "#FFAA00";
 let phoneKey = "p";
 
+// 移動・物理
 let velocity = { x: 0, y: 0, z: 0 };
-const GRAVITY = -9.8;
+const GRAVITY = -20;
 const MOVE_SPEED = 4;
+const JUMP_POWER = 8;
 let keys = {};
 let yaw = 0;
 let pitch = 0;
+let isGrounded = true;
 
 // DOM
 const loginOverlay = document.getElementById("login-overlay");
@@ -64,9 +76,17 @@ const ground = document.getElementById("ground");
 const envSky = document.getElementById("env-sky");
 const envLight = document.getElementById("env-light");
 
+// ===============================
 // キー入力
+// ===============================
 window.addEventListener("keydown", (e) => {
   keys[e.key.toLowerCase()] = true;
+
+  // ジャンプ
+  if (e.key === " " && isGrounded) {
+    velocity.y = JUMP_POWER;
+    isGrounded = false;
+  }
 });
 
 window.addEventListener("keyup", (e) => {
@@ -111,7 +131,9 @@ window.addEventListener("keydown", (e) => {
   pitch = Math.max(-80, Math.min(80, pitch));
 });
 
-// --- ログインタブ切り替え ---
+// ===============================
+// ログインタブ切り替え
+// ===============================
 let loginMode = "login";
 
 loginTabBtns.forEach((btn) => {
@@ -130,7 +152,9 @@ loginTabBtns.forEach((btn) => {
   };
 });
 
-// --- ログイン / 新規登録 ---
+// ===============================
+// ログイン / 新規登録
+// ===============================
 loginSubmit.onclick = async () => {
   const username = loginUsername.value.trim();
   const password = loginPassword.value.trim();
@@ -192,56 +216,167 @@ function afterLogin() {
   );
 
   initSocket();
-  connectWS(currentRoomId);
+  connectWS("lobby"); // ログイン後は必ずロビーへ
   loadMyRooms();
   loadSnsHistory();
   loadDmHistory();
 }
 
-// --- アカウント更新 ---
-accountUpdateBtn.onclick = async () => {
-  const displayName = displayNameInput.value.trim() || currentUser.username;
-  const avatarColorVal = avatarColorInput.value || "#FFAA00";
-  const phoneKeyVal = phoneKeyInput.value.trim().toLowerCase() || "p";
+// ===============================
+// WebSocket（位置同期）
+// ===============================
+let ws;
 
-  try {
-    const res = await fetch("/api/updateUser", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-session-token": sessionToken
-      },
-      body: JSON.stringify({
-        displayName,
-        avatarColor: avatarColorVal,
-        phoneKey: phoneKeyVal
-      })
-    });
-    const json = await res.json();
-    if (!json.ok) throw new Error(json.error || "update failed");
+function connectWS(roomId) {
+  if (ws) ws.close();
 
-    currentUser.displayName = displayName;
-    currentUser.avatarColor = avatarColorVal;
-    currentUser.phoneKey = phoneKeyVal;
-    avatarColor = avatarColorVal;
-    phoneKey = phoneKeyVal;
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(
+    `${proto}://${location.host}/?room=${roomId}&username=${encodeURIComponent(
+      currentUser.username
+    )}`
+  );
 
-    labelDisplayName.textContent = displayName;
-    playerAvatar.setAttribute("material", `color: ${avatarColor}`);
-    playerNameTag.setAttribute(
-      "text",
-      `value: ${displayName}; align: center; color: #00FFFF; width: 4`
+  ws.onmessage = (msg) => {
+    const data = JSON.parse(msg.data);
+    if (data.type === "spawn") {
+      handleSpawn(data);
+    }
+  };
+}
+
+function handleSpawn(data) {
+  let e = document.getElementById(data.id);
+  let nameTag;
+
+  if (!e) {
+    e = document.createElement("a-entity");
+    e.setAttribute("id", data.id);
+    e.setAttribute(
+      "geometry",
+      "primitive: box; height: 1.6; width: 0.5; depth: 0.5"
     );
-    phoneKeyLabel.textContent = phoneKey.toUpperCase();
+    e.setAttribute("material", `color: ${data.avatarColor}`);
+    e.setAttribute("position", "0 0 0");
 
-    alert("更新しました");
-  } catch (e) {
-    console.error(e);
-    alert("更新に失敗しました");
+    nameTag = document.createElement("a-entity");
+    nameTag.setAttribute(
+      "text",
+      `value: ${data.displayName}; align: center; color: #00FFFF; width: 4`
+    );
+    nameTag.setAttribute("position", "0 2.2 0");
+    nameTag.setAttribute("id", `name-${data.id}`);
+
+    e.appendChild(nameTag);
+    document.querySelector("a-scene").appendChild(e);
+  } else {
+    nameTag = document.getElementById(`name-${data.id}`);
   }
-};
 
-// --- ルーム関連 ---
+  e.setAttribute("position", data.pos);
+  if (nameTag) {
+    nameTag.setAttribute(
+      "text",
+      `value: ${data.displayName}; align: center; color: #00FFFF; width: 4`
+    );
+  }
+
+  // マップ用に位置を保存
+  updateMapPlayer(data.id, data.mapPos);
+}
+
+// ===============================
+// 移動・ジャンプ・重力
+// ===============================
+let lastTime = performance.now();
+
+function tick() {
+  const now = performance.now();
+  const dt = (now - lastTime) / 1000;
+  lastTime = now;
+
+  if (currentUser) updateMovement(dt);
+  requestAnimationFrame(tick);
+}
+
+function updateMovement(dt) {
+  const pos = playerRoot.getAttribute("position");
+
+  // 視点
+  playerRoot.setAttribute("rotation", `0 ${yaw} 0`);
+  playerCamera.setAttribute("rotation", `${pitch} 0 0`);
+
+  // 前後逆転（W=後退 / S=前進）
+  let inputX = 0;
+  let inputZ = 0;
+  if (keys["w"]) inputZ += 1; // ←逆転
+  if (keys["s"]) inputZ -= 1; // ←逆転
+  if (keys["a"]) inputX -= 1;
+  if (keys["d"]) inputX += 1;
+
+  const len = Math.hypot(inputX, inputZ);
+  if (len > 0) {
+    inputX /= len;
+    inputZ /= len;
+  }
+
+  const rad = (yaw * Math.PI) / 180;
+  const forwardX = -Math.sin(rad);
+  const forwardZ = -Math.cos(rad);
+  const rightX = Math.cos(rad);
+  const rightZ = -Math.sin(rad);
+
+  const moveX = (forwardX * inputZ + rightX * inputX) * MOVE_SPEED;
+  const moveZ = (forwardZ * inputZ + rightZ * inputX) * MOVE_SPEED;
+
+  velocity.x = moveX;
+  velocity.z = moveZ;
+
+  // 重力
+  velocity.y += GRAVITY * dt;
+
+  let newY = pos.y + velocity.y * dt;
+  if (newY < 1) {
+    newY = 1;
+    velocity.y = 0;
+    isGrounded = true;
+  }
+
+  const newX = pos.x + velocity.x * dt;
+  const newZ = pos.z + velocity.z * dt;
+
+  playerRoot.setAttribute("position", {
+    x: newX,
+    y: newY,
+    z: newZ
+  });
+
+  // サーバへ送信
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(
+      JSON.stringify({
+        type: "move",
+        pos: { x: newX, y: newY, z: newZ },
+        avatarColor
+      })
+    );
+  }
+
+  // マップ更新
+  updateMapSelf({ x: newX, y: newY, z: newZ }, yaw);
+}
+
+tick();
+// ===============================
+//  client.js (2/3)
+//  - ルーム読み込み
+//  - Socket.IO（音声 / SNS / DM）
+//  - スマホUI
+// ===============================
+
+// -------------------------------
+// ルーム一覧読み込み
+// -------------------------------
 async function loadMyRooms() {
   try {
     const res = await fetch("/api/myRooms", {
@@ -267,6 +402,9 @@ async function loadMyRooms() {
   }
 }
 
+// -------------------------------
+// ルーム作成
+// -------------------------------
 createRoomBtn.onclick = async () => {
   const roomId = roomInput.value.trim();
   if (!roomId) return alert("Room ID を入力してね");
@@ -293,6 +431,9 @@ createRoomBtn.onclick = async () => {
   }
 };
 
+// -------------------------------
+// ルーム読み込み
+// -------------------------------
 joinRoomBtn.onclick = () => {
   const roomId = roomInput.value.trim() || "lobby";
   currentRoomId = roomId;
@@ -347,9 +488,13 @@ async function loadRoom(roomId) {
       scene.appendChild(e);
     });
 
-    // エディタ側にも反映
+    // エディタへ反映
     window.editorLoadRoom(roomId, room);
+
+    // WS再接続
     connectWS(roomId);
+
+    // Socket.IO ルーム参加
     socket.emit("join-room", {
       roomId,
       username: currentUser.username
@@ -360,66 +505,9 @@ async function loadRoom(roomId) {
   }
 }
 
-// --- WebSocket（位置同期） ---
-let ws;
-function connectWS(roomId) {
-  if (ws) {
-    ws.close();
-  }
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  ws = new WebSocket(
-    `${proto}://${location.host}/?room=${roomId}&username=${encodeURIComponent(
-      currentUser.username
-    )}`
-  );
-
-  ws.onmessage = (msg) => {
-    const data = JSON.parse(msg.data);
-    if (data.type === "spawn") {
-      let e = document.getElementById(data.id);
-      let nameTag;
-      if (!e) {
-        e = document.createElement("a-entity");
-        e.setAttribute("id", data.id);
-        e.setAttribute(
-          "geometry",
-          "primitive: box; height: 1.6; width: 0.5; depth: 0.5"
-        );
-        e.setAttribute(
-          "material",
-          `color: ${data.avatarColor || "#00AAFF"}`
-        );
-        e.setAttribute("position", "0 0 0");
-
-        nameTag = document.createElement("a-entity");
-        nameTag.setAttribute(
-          "text",
-          `value: ${data.displayName || "Guest"}; align: center; color: #00FFFF; width: 4`
-        );
-        nameTag.setAttribute("position", "0 2.2 0");
-        nameTag.setAttribute("id", `name-${data.id}`);
-
-        e.appendChild(nameTag);
-        document.querySelector("a-scene").appendChild(e);
-      } else {
-        nameTag = document.getElementById(`name-${data.id}`);
-      }
-
-      e.setAttribute("position", data.pos);
-      if (data.avatarColor) {
-        e.setAttribute("material", `color: ${data.avatarColor}`);
-      }
-      if (nameTag && data.displayName) {
-        nameTag.setAttribute(
-          "text",
-          `value: ${data.displayName}; align: center; color: #00FFFF; width: 4`
-        );
-      }
-    }
-  };
-}
-
-// --- Socket.IO（音声＋SNS＋DM） ---
+// ===============================
+// Socket.IO（音声 / SNS / DM）
+// ===============================
 const socket = io();
 window.socket = socket;
 
@@ -435,13 +523,13 @@ function initSocket() {
     });
   });
 
+  // SNS履歴
   socket.on("sns-history", (messages) => {
     snsFeed.innerHTML = "";
-    messages.forEach((m) => {
-      addSnsItem(snsFeed, m);
-    });
+    messages.forEach((m) => addSnsItem(snsFeed, m));
   });
 
+  // DM履歴
   socket.on("dm-history", (messages) => {
     messages.forEach((m) => {
       addDmLog(
@@ -451,20 +539,21 @@ function initSocket() {
     });
   });
 
+  // SNSリアルタイム
   socket.on("sns-feed", (msg) => {
     addSnsItem(snsFeed, msg);
   });
 
+  // DMリアルタイム
   socket.on("dm-receive", ({ from, fromUsername, fromDisplayName, message, time }) => {
     const label = `${fromDisplayName || fromUsername} (${fromUsername})`;
     addDmLog(`受信 ← ${label}`, `${message} (${time})`);
   });
 
+  // WebRTC シグナリング
   socket.on("signal", async ({ from, data }) => {
     let pc = peers[from];
-    if (!pc) {
-      pc = await createPeerConnection(from, false);
-    }
+    if (!pc) pc = await createPeerConnection(from, false);
 
     if (data.type === "offer") {
       await pc.setRemoteDescription(new RTCSessionDescription(data));
@@ -483,7 +572,9 @@ function initSocket() {
   });
 }
 
+// -------------------------------
 // 音声チャット
+// -------------------------------
 startVoiceBtn.onclick = async () => {
   if (localStream) {
     alert("すでに音声チャット中だよ");
@@ -540,7 +631,9 @@ async function createPeerConnection(peerId, isCaller) {
   return pc;
 }
 
-// --- SNS ---
+// ===============================
+// SNS
+// ===============================
 snsSendBtn.onclick = () => {
   const text = snsTextInput.value.trim();
   if (!text) return;
@@ -577,7 +670,9 @@ function addSnsItem(container, post) {
   container.prepend(div);
 }
 
-// --- DM ---
+// ===============================
+// DM
+// ===============================
 dmSendBtn.onclick = () => {
   const toUsername = dmToUsernameInput.value.trim();
   const toSocketId = dmToSocketInput.value.trim();
@@ -616,7 +711,9 @@ function addDmLog(fromLabel, text) {
   dmLog.prepend(div);
 }
 
-// --- SNS履歴 / DM履歴（REST） ---
+// -------------------------------
+// SNS履歴 / DM履歴（REST）
+// -------------------------------
 async function loadSnsHistory() {
   try {
     const res = await fetch("/api/snsHistory");
@@ -647,7 +744,9 @@ async function loadDmHistory() {
   }
 }
 
-// --- スマホ ---
+// ===============================
+// スマホUI
+// ===============================
 function openPhone() {
   phone.classList.remove("hidden");
 }
@@ -668,91 +767,153 @@ phoneTabs.forEach((btn) => {
   };
 });
 
+// スマホ開閉キー
 window.addEventListener("keydown", (e) => {
   if (!currentUser) return;
   if (e.key.toLowerCase() === phoneKey) {
-    if (phone.classList.contains("hidden")) {
-      openPhone();
-    } else {
-      closePhone();
-    }
+    if (phone.classList.contains("hidden")) openPhone();
+    else closePhone();
   }
 });
+// ===============================
+//  client.js (3/3)
+//  - マップ描画
+//  - マッププレイヤー管理
+//  - エディタ起動
+// ===============================
 
-// --- 移動・重力・同期 ---
-let lastTime = performance.now();
+// ===============================
+// マップデータ
+// ===============================
+const mapCanvas = document.getElementById("map-canvas");
+const mapCtx = mapCanvas.getContext("2d");
+const mapModeSelect = document.getElementById("map-mode");
 
-function tick() {
-  const now = performance.now();
-  const dt = (now - lastTime) / 1000;
-  lastTime = now;
+// 自分の位置・向き
+let mapSelf = {
+  pos: { x: 0, y: 0, z: 0 },
+  yaw: 0
+};
 
-  if (currentUser) updateMovement(dt);
-  requestAnimationFrame(tick);
+// 他プレイヤー
+let mapPlayers = {}; // id -> { x, y, z }
+
+// 自分の位置更新
+function updateMapSelf(pos, yaw) {
+  mapSelf.pos = pos;
+  mapSelf.yaw = yaw;
+  drawMap();
 }
 
-function updateMovement(dt) {
-  const pos = playerRoot.getAttribute("position");
-
-  playerRoot.setAttribute("rotation", `0 ${yaw} 0`);
-  playerCamera.setAttribute("rotation", `${pitch} 0 0`);
-
-  let inputX = 0;
-  let inputZ = 0;
-  if (keys["w"]) inputZ -= 1;
-  if (keys["s"]) inputZ += 1;
-  if (keys["a"]) inputX -= 1;
-  if (keys["d"]) inputX += 1;
-
-  const len = Math.hypot(inputX, inputZ);
-  if (len > 0) {
-    inputX /= len;
-    inputZ /= len;
-  }
-
-  const rad = (yaw * Math.PI) / 180;
-  const forwardX = -Math.sin(rad);
-  const forwardZ = -Math.cos(rad);
-  const rightX = Math.cos(rad);
-  const rightZ = -Math.sin(rad);
-
-  const moveX = (forwardX * inputZ + rightX * inputX) * MOVE_SPEED;
-  const moveZ = (forwardZ * inputZ + rightX * inputX) * MOVE_SPEED;
-
-  velocity.x = moveX;
-  velocity.z = moveZ;
-
-  velocity.y += GRAVITY * dt;
-
-  let newY = pos.y + velocity.y * dt;
-  if (newY < 1) {
-    newY = 1;
-    velocity.y = 0;
-  }
-
-  const newX = pos.x + velocity.x * dt;
-  const newZ = pos.z + velocity.z * dt;
-
-  playerRoot.setAttribute("position", {
-    x: newX,
-    y: newY,
-    z: newZ
-  });
-
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(
-      JSON.stringify({
-        type: "move",
-        pos: { x: newX, y: newY, z: newZ },
-        avatarColor
-      })
-    );
-  }
+// 他プレイヤー更新
+function updateMapPlayer(id, pos) {
+  mapPlayers[id] = pos;
+  drawMap();
 }
 
-tick();
+// 他プレイヤー削除（WS切断時など）
+function removeMapPlayer(id) {
+  delete mapPlayers[id];
+  drawMap();
+}
 
-// --- エディタ起動 ---
+// ===============================
+// マップ描画
+// ===============================
+function drawMap() {
+  const ctx = mapCtx;
+  const w = mapCanvas.width;
+  const h = mapCanvas.height;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // 背景
+  ctx.fillStyle = "rgba(0, 20, 40, 0.8)";
+  ctx.fillRect(0, 0, w, h);
+
+  // 中心（自分）
+  const centerX = w / 2;
+  const centerY = h / 2;
+
+  // スケール（1m = 4px）
+  const scale = 4;
+
+  // マップモード
+  const mode = mapModeSelect.value; // "north" or "heading"
+
+  // 自分の向き
+  const yawRad = (mapSelf.yaw * Math.PI) / 180;
+
+  // 描画関数：ワールド座標 → マップ座標
+  function worldToMap(x, z) {
+    const dx = x - mapSelf.pos.x;
+    const dz = z - mapSelf.pos.z;
+
+    let rx = dx;
+    let rz = dz;
+
+    if (mode === "heading") {
+      // 自分の向きに合わせて回転
+      const sin = Math.sin(-yawRad);
+      const cos = Math.cos(-yawRad);
+      const nx = dx * cos - dz * sin;
+      const nz = dx * sin + dz * cos;
+      rx = nx;
+      rz = nz;
+    }
+
+    return {
+      x: centerX + rx * scale,
+      y: centerY + rz * scale
+    };
+  }
+
+  // 他プレイヤー描画
+  ctx.fillStyle = "#ffffff";
+  for (const id in mapPlayers) {
+    const p = mapPlayers[id];
+    const m = worldToMap(p.x, p.z);
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 自分（中央）
+  ctx.fillStyle = "#00ffff";
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 自分の向き（矢印）
+  ctx.strokeStyle = "#00ffff";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY);
+  let arrowX = centerX;
+  let arrowY = centerY - 12;
+
+  if (mode === "heading") {
+    // heading モードは常に上向き
+    arrowX = centerX;
+    arrowY = centerY - 12;
+  } else {
+    // north モードは yaw に合わせて回転
+    const sin = Math.sin(-yawRad);
+    const cos = Math.cos(-yawRad);
+    arrowX = centerX + sin * 12;
+    arrowY = centerY - cos * 12;
+  }
+
+  ctx.lineTo(arrowX, arrowY);
+  ctx.stroke();
+}
+
+// マップモード変更時
+mapModeSelect.onchange = drawMap;
+
+// ===============================
+// エディタ起動
+// ===============================
 openEditorBtn.onclick = () => {
   if (!currentRoomId) return alert("ルームを選択してね");
   window.editorOpen(currentRoomId, sessionToken);
