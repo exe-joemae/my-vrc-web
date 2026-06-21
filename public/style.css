@@ -1,27 +1,51 @@
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
+  background: radial-gradient(circle at top, #101020, #020208);
+  color: #e0f7ff;
 }
 
-/* 左上UI */
-#ui {
+/* サイバーHUD */
+.cyber-panel {
   position: absolute;
   top: 10px;
   left: 10px;
   z-index: 10;
-  background: rgba(0, 0, 0, 0.4);
-  color: #fff;
+  background: rgba(5, 10, 30, 0.85);
+  border: 1px solid #00ffff55;
+  box-shadow: 0 0 12px #00ffff44;
+  color: #e0f7ff;
   padding: 8px;
-  border-radius: 6px;
-  max-width: 260px;
+  border-radius: 8px;
+  max-width: 280px;
   font-size: 12px;
+  backdrop-filter: blur(6px);
 }
 
-#room-ui,
-#voice-ui,
-#sns-ui,
-#phone-hint {
+.cyber-title {
+  font-size: 14px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  color: #00ffff;
+  margin-bottom: 6px;
+  text-shadow: 0 0 6px #00ffffaa;
+}
+
+.cyber-block {
   margin-bottom: 8px;
+  border-top: 1px solid #00ffff33;
+  padding-top: 6px;
+}
+
+.block-title {
+  font-size: 11px;
+  color: #66e0ff;
+  margin-bottom: 4px;
+}
+
+.small-text {
+  font-size: 10px;
+  opacity: 0.8;
 }
 
 input {
@@ -29,87 +53,115 @@ input {
   margin-bottom: 4px;
   padding: 4px;
   border-radius: 4px;
-  border: none;
+  border: 1px solid #00ffff55;
+  background: #050818;
+  color: #e0f7ff;
+  font-size: 11px;
 }
 
-button {
+.cyber-btn {
   padding: 4px 8px;
   border-radius: 4px;
-  border: none;
+  border: 1px solid #00ffff88;
+  background: #050818;
+  color: #e0f7ff;
   cursor: pointer;
+  font-size: 11px;
+  transition: background 0.1s, box-shadow 0.1s;
 }
 
-#sns-feed {
+.cyber-btn:hover {
+  background: #0a1a3a;
+  box-shadow: 0 0 8px #00ffff55;
+}
+
+.cyber-btn.accent {
+  border-color: #ff00ff88;
+  color: #ffb3ff;
+}
+
+.cyber-scroll {
   max-height: 150px;
   overflow-y: auto;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 10, 30, 0.7);
   padding: 4px;
   margin-bottom: 4px;
+  border-radius: 4px;
+  border: 1px solid #00ffff33;
 }
+
 .sns-item {
   margin-bottom: 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid rgba(0, 255, 255, 0.2);
   padding-bottom: 2px;
 }
 .sns-name {
   font-weight: bold;
+  color: #00ffff;
 }
 .sns-time {
   font-size: 10px;
   opacity: 0.7;
 }
 
-/* スマホUI */
-#phone {
+/* スマホ（サイバー端末） */
+.phone {
   position: absolute;
   right: 20px;
   bottom: 20px;
-  width: 260px;
-  height: 420px;
-  background: #111;
-  color: #fff;
-  border-radius: 20px;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.7);
+  width: 280px;
+  height: 460px;
+  background: radial-gradient(circle at top, #151530, #050515);
+  color: #e0f7ff;
+  border-radius: 24px;
+  box-shadow: 0 0 25px #00ffff55;
   z-index: 20;
   display: flex;
   flex-direction: column;
+  border: 1px solid #00ffff88;
 }
 
-#phone.hidden {
+.phone.hidden {
   display: none;
 }
 
-#phone-header {
+.phone-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid #00ffff44;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #00ffff;
 }
 
-#phone-header button {
+.phone-close {
   background: transparent;
-  color: #fff;
+  color: #ff8080;
   border: none;
   font-size: 14px;
+  cursor: pointer;
 }
 
-#phone-tabs {
+.phone-tabs {
   display: flex;
   justify-content: space-around;
   padding: 6px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid #00ffff33;
 }
 
-#phone-tabs button {
-  background: #222;
-  color: #fff;
+.phone-tab-btn {
+  background: #050818;
+  color: #e0f7ff;
   border-radius: 12px;
-  font-size: 11px;
+  font-size: 10px;
   padding: 4px 6px;
+  border: 1px solid #00ffff55;
+  cursor: pointer;
 }
 
-#phone-content {
+.phone-content {
   flex: 1;
   padding: 8px;
   overflow-y: auto;
@@ -120,30 +172,26 @@ button {
   display: none;
 }
 
-#phone-sns-feed {
-  max-height: 180px;
-  overflow-y: auto;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 4px;
-  margin-bottom: 4px;
-}
-
+#phone-sns-feed,
 #dm-log {
   max-height: 180px;
   overflow-y: auto;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 10, 30, 0.7);
   padding: 4px;
   margin-bottom: 4px;
+  border-radius: 4px;
+  border: 1px solid #00ffff33;
 }
 
 .dm-item {
   margin-bottom: 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid rgba(0, 255, 255, 0.2);
   padding-bottom: 2px;
 }
 .dm-from {
   font-weight: bold;
   font-size: 11px;
+  color: #ffb3ff;
 }
 .dm-text {
   font-size: 12px;
