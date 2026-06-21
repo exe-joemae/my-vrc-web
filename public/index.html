@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Web VRC with Voice & SNS</title>
+    <title>Web VRC with Gravity, Avatar, Voice & SNS</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <link rel="stylesheet" href="style.css" />
@@ -30,27 +30,48 @@
     <a-scene id="scene">
       <a-assets>
         <template id="avatar-template">
-          <a-sphere radius="0.2" color="#FFC65D"></a-sphere>
+          <a-entity>
+            <a-sphere radius="0.25" color="#FFC65D" position="0 1.6 0"></a-sphere>
+            <a-cylinder
+              radius="0.25"
+              height="1.2"
+              color="#4CC3D9"
+              position="0 0.8 0"
+            ></a-cylinder>
+          </a-entity>
         </template>
       </a-assets>
 
-      <a-entity
-        id="player"
-        position="0 1.6 0"
-        camera
-        look-controls
-        wasd-controls
-      ></a-entity>
+      <!-- 仮アバター（自分） -->
+      <a-entity id="playerRoot" position="0 1 0">
+        <a-entity
+          id="playerCamera"
+          camera
+          position="0 1.6 0"
+          look-controls="enabled: false"
+        ></a-entity>
+        <a-entity
+          id="playerAvatar"
+          geometry="primitive: box; height: 1.6; width: 0.5; depth: 0.5"
+          material="color: #FFAA00"
+          position="0 0.8 0"
+        ></a-entity>
+      </a-entity>
 
-      <a-box position="0 0.5 -3" color="#4CC3D9"></a-box>
-      <a-sphere position="2 1 -3" radius="1" color="#EF2D5E"></a-sphere>
+      <!-- 他プレイヤーは client.js で生成 -->
+
+      <!-- 地面 -->
       <a-plane
-        position="0 0 -4"
+        position="0 0 0"
         rotation="-90 0 0"
-        width="10"
-        height="10"
+        width="50"
+        height="50"
         color="#7BC8A4"
       ></a-plane>
+
+      <!-- 適当なオブジェクト -->
+      <a-box position="0 0.5 -3" color="#4CC3D9"></a-box>
+      <a-sphere position="2 1 -3" radius="1" color="#EF2D5E"></a-sphere>
     </a-scene>
 
     <script src="client.js"></script>
