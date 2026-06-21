@@ -13,9 +13,6 @@ const io = new Server(server);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-/**
- * メモリDB
- */
 const db = {
   users: {},
   rooms: {},
@@ -23,16 +20,10 @@ const db = {
   dmMessages: []
 };
 
-/**
- * パスワードハッシュ
- */
 function hashPassword(password) {
   return crypto.createHash("sha256").update(password).digest("hex");
 }
 
-/**
- * ロビー自動生成
- */
 function ensureLobby() {
   if (!db.rooms["lobby"]) {
     db.rooms["lobby"] = {
@@ -54,11 +45,7 @@ function ensureLobby() {
 }
 ensureLobby();
 
-/**
- * 認証API
- */
-
-// 新規登録
+// 認証
 app.post("/api/register", (req, res) => {
   const { username, password, displayName } = req.body || {};
   if (!username || !password) {
@@ -80,7 +67,6 @@ app.post("/api/register", (req, res) => {
   res.json({ ok: true });
 });
 
-// ログイン
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
@@ -110,7 +96,6 @@ app.post("/api/login", (req, res) => {
   });
 });
 
-// セッションユーザー取得
 app.get("/api/me", (req, res) => {
   const token = req.headers["x-session-token"];
   const user = Object.values(db.users).find((u) => u.sessionToken === token);
@@ -127,7 +112,6 @@ app.get("/api/me", (req, res) => {
   });
 });
 
-// ユーザー設定更新
 app.post("/api/updateUser", (req, res) => {
   const token = req.headers["x-session-token"];
   const user = Object.values(db.users).find((u) => u.sessionToken === token);
@@ -141,11 +125,7 @@ app.post("/api/updateUser", (req, res) => {
   res.json({ ok: true });
 });
 
-/**
- * ルームAPI
- */
-
-// 自分のルーム一覧
+// ルーム
 app.get("/api/myRooms", (req, res) => {
   const token = req.headers["x-session-token"];
   const user = Object.values(db.users).find((u) => u.sessionToken === token);
@@ -164,7 +144,6 @@ app.get("/api/myRooms", (req, res) => {
   res.json({ ok: true, rooms });
 });
 
-// ルーム作成
 app.post("/api/createRoom", (req, res) => {
   const token = req.headers["x-session-token"];
   const user = Object.values(db.users).find((u) => u.sessionToken === token);
@@ -195,7 +174,6 @@ app.post("/api/createRoom", (req, res) => {
   res.json({ ok: true, room: db.rooms[roomId] });
 });
 
-// ルーム取得
 app.get("/api/getRoom/:roomId", (req, res) => {
   const roomId = req.params.roomId;
   const room = db.rooms[roomId];
@@ -203,7 +181,6 @@ app.get("/api/getRoom/:roomId", (req, res) => {
   res.json({ ok: true, room });
 });
 
-// ルーム更新
 app.post("/api/updateRoom/:roomId", (req, res) => {
   const token = req.headers["x-session-token"];
   const user = Object.values(db.users).find((u) => u.sessionToken === token);
@@ -224,16 +201,11 @@ app.post("/api/updateRoom/:roomId", (req, res) => {
   res.json({ ok: true, room });
 });
 
-/**
- * SNS / DM
- */
-
-// SNS履歴
+// SNS / DM
 app.get("/api/snsHistory", (req, res) => {
   res.json({ ok: true, messages: db.snsMessages });
 });
 
-// DM履歴
 app.get("/api/dmHistory", (req, res) => {
   const token = req.headers["x-session-token"];
   const user = Object.values(db.users).find((u) => u.sessionToken === token);
@@ -245,10 +217,7 @@ app.get("/api/dmHistory", (req, res) => {
   res.json({ ok: true, messages });
 });
 
-/**
- * WebSocket（位置同期）
- */
-
+// WebSocket（位置同期）
 let wsClients = new Map(); // ws -> { id, room, username }
 
 wss.on("connection", (ws, req) => {
@@ -272,30 +241,43 @@ wss.on("connection", (ws, req) => {
         avatarColor: data.avatarColor || "#00AAFF"
       };
 
-      // マップ用に位置も送る
       for (const [client, info] of wsClients) {
-        if (client !== ws && info.room === me.room) {
-          client.send(
-            JSON.stringify({
-              type: "spawn",
-              id: me.id,
-              pos: data.pos,
-              avatarColor: data.avatarColor || user.avatarColor,
-              displayName: user.displayName,
-              mapPos: data.pos
-            })
-          );
-        }
+        if (info.room !== me.room) continue;
+        if (client === ws) continue;
+
+        client.send(
+          JSON.stringify({
+            type: "spawn",
+            id: me.id,
+            pos: data.pos,
+            avatarColor: data.avatarColor || user.avatarColor,
+            displayName: user.displayName,
+            mapPos: data.pos
+          })
+        );
       }
     }
   });
 
-  ws.on("close", () => wsClients.delete(ws));
+  ws.on("close", () => {
+    const me = wsClients.get(ws);
+    wsClients.delete(ws);
+    if (!me) return;
+
+    // 他クライアントに despawn 通知
+    for (const [client, info] of wsClients) {
+      if (info.room !== me.room) continue;
+      client.send(
+        JSON.stringify({
+          type: "despawn",
+          id: me.id
+        })
+      );
+    }
+  });
 });
 
-/**
- * Socket.IO（音声 / SNS / DM）
- */
+// Socket.IO
 io.on("connection", (socket) => {
   socket.on("join-room", (payload) => {
     const { roomId, username } = payload || {};
@@ -311,7 +293,6 @@ io.on("connection", (socket) => {
     socket.emit("dm-history", myDm);
   });
 
-  // WebRTC
   socket.on("signal", (payload) => {
     const { to, data } = payload;
     io.to(to).emit("signal", { from: socket.id, data });
@@ -323,7 +304,6 @@ io.on("connection", (socket) => {
     cb(peers);
   });
 
-  // SNS
   socket.on("sns-post", (post) => {
     const msg = {
       userDisplayName: post.userDisplayName || "名無し",
@@ -334,7 +314,6 @@ io.on("connection", (socket) => {
     io.emit("sns-feed", msg);
   });
 
-  // DM
   socket.on("dm-send", (payload) => {
     const {
       toSocketId,
