@@ -1,60 +1,8 @@
-// --- DOM参照 ---
-const roomInput = document.getElementById("roomId");
-const joinRoomBtn = document.getElementById("joinRoomBtn");
+// グローバル状態
+let sessionToken = null;
+let currentUser = null;
+let currentRoomId = "lobby";
 
-const usernameInput = document.getElementById("username");
-const displayNameInput = document.getElementById("displayName");
-const phoneUsernameInput = document.getElementById("phoneUsername");
-const phoneDisplayNameInput = document.getElementById("phoneDisplayName");
-const accountSaveBtn = document.getElementById("accountSaveBtn");
-const accountLoadBtn = document.getElementById("accountLoadBtn");
-
-const socketIdLabel = document.getElementById("socketIdLabel");
-
-const playerRoot = document.getElementById("playerRoot");
-const playerCamera = document.getElementById("playerCamera");
-const playerAvatar = document.getElementById("playerAvatar");
-const playerNameTag = document.getElementById("playerNameTag");
-const ground = document.getElementById("ground");
-const box1 = document.getElementById("box1");
-
-const phone = document.getElementById("phone");
-const phoneClose = document.getElementById("phone-close");
-const phoneTabs = document.querySelectorAll("#phone-tabs button");
-
-const phoneKeyInput = document.getElementById("phoneKeyInput");
-const phoneKeySave = document.getElementById("phoneKeySave");
-const phoneKeyLabel = document.getElementById("phoneKeyLabel");
-
-const roomGroundColorInput = document.getElementById("roomGroundColor");
-const roomBoxColorInput = document.getElementById("roomBoxColor");
-const roomApplyBtn = document.getElementById("roomApply");
-
-const avatarColorInput = document.getElementById("avatarColorInput");
-const avatarApplyBtn = document.getElementById("avatarApply");
-
-const dmToUsernameInput = document.getElementById("dm-to-username");
-const dmToSocketInput = document.getElementById("dm-to-socket");
-const dmTextInput = document.getElementById("dm-text");
-const dmSendBtn = document.getElementById("dm-send");
-const dmLog = document.getElementById("dm-log");
-
-const startVoiceBtn = document.getElementById("startVoiceBtn");
-
-// --- SNS（HUD側） ---
-const snsTextInput = document.getElementById("sns-text");
-const snsSendBtn = document.getElementById("sns-send");
-const snsFeed = document.getElementById("sns-feed");
-
-// --- SNS（スマホ側）は sns.js で扱う ---
-
-// --- 状態 ---
-const url = new URL(window.location.href);
-const currentRoom = url.searchParams.get("room") || "lobby";
-roomInput.value = currentRoom;
-
-let username = "guest";
-let displayName = "Guest";
 let avatarColor = "#FFAA00";
 let phoneKey = "p";
 
@@ -65,7 +13,58 @@ let keys = {};
 let yaw = 0;
 let pitch = 0;
 
-// --- キー入力 ---
+// DOM
+const loginOverlay = document.getElementById("login-overlay");
+const loginTabBtns = document.querySelectorAll(".login-tab-btn");
+const loginUsername = document.getElementById("login-username");
+const loginPassword = document.getElementById("login-password");
+const loginDisplayNameLabel = document.getElementById("login-displayName-label");
+const loginDisplayName = document.getElementById("login-displayName");
+const loginSubmit = document.getElementById("login-submit");
+const loginMessage = document.getElementById("login-message");
+
+const hud = document.getElementById("ui");
+const labelUsername = document.getElementById("label-username");
+const labelDisplayName = document.getElementById("label-displayName");
+const displayNameInput = document.getElementById("displayName");
+const avatarColorInput = document.getElementById("avatarColorInput");
+const phoneKeyInput = document.getElementById("phoneKeyInput");
+const accountUpdateBtn = document.getElementById("accountUpdateBtn");
+
+const roomInput = document.getElementById("roomId");
+const joinRoomBtn = document.getElementById("joinRoomBtn");
+const createRoomBtn = document.getElementById("createRoomBtn");
+const myRoomsList = document.getElementById("myRoomsList");
+
+const startVoiceBtn = document.getElementById("startVoiceBtn");
+const socketIdLabel = document.getElementById("socketIdLabel");
+
+const snsTextInput = document.getElementById("sns-text");
+const snsSendBtn = document.getElementById("sns-send");
+const snsFeed = document.getElementById("sns-feed");
+
+const phone = document.getElementById("phone");
+const phoneClose = document.getElementById("phone-close");
+const phoneTabs = document.querySelectorAll("#phone-tabs button");
+const phoneKeyLabel = document.getElementById("phoneKeyLabel");
+
+const dmToUsernameInput = document.getElementById("dm-to-username");
+const dmToSocketInput = document.getElementById("dm-to-socket");
+const dmTextInput = document.getElementById("dm-text");
+const dmSendBtn = document.getElementById("dm-send");
+const dmLog = document.getElementById("dm-log");
+
+const openEditorBtn = document.getElementById("openEditorBtn");
+
+const playerRoot = document.getElementById("playerRoot");
+const playerCamera = document.getElementById("playerCamera");
+const playerAvatar = document.getElementById("playerAvatar");
+const playerNameTag = document.getElementById("playerNameTag");
+const ground = document.getElementById("ground");
+const envSky = document.getElementById("env-sky");
+const envLight = document.getElementById("env-light");
+
+// キー入力
 window.addEventListener("keydown", (e) => {
   keys[e.key.toLowerCase()] = true;
 });
@@ -112,19 +111,267 @@ window.addEventListener("keydown", (e) => {
   pitch = Math.max(-80, Math.min(80, pitch));
 });
 
-// --- WebSocket（位置同期） ---
-let ws;
-function connectWS(room) {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  ws = new WebSocket(
-    `${proto}://${location.host}/?room=${room}&username=${encodeURIComponent(
-      username
-    )}`
+// --- ログインタブ切り替え ---
+let loginMode = "login";
+
+loginTabBtns.forEach((btn) => {
+  btn.onclick = () => {
+    loginMode = btn.dataset.mode;
+    loginTabBtns.forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+
+    if (loginMode === "register") {
+      loginDisplayNameLabel.classList.remove("hidden");
+      loginDisplayName.classList.remove("hidden");
+    } else {
+      loginDisplayNameLabel.classList.add("hidden");
+      loginDisplayName.classList.add("hidden");
+    }
+  };
+});
+
+// --- ログイン / 新規登録 ---
+loginSubmit.onclick = async () => {
+  const username = loginUsername.value.trim();
+  const password = loginPassword.value.trim();
+  const displayName = loginDisplayName.value.trim();
+
+  if (!username || !password) {
+    loginMessage.textContent = "ユーザー名とパスワードを入力してね";
+    return;
+  }
+
+  try {
+    if (loginMode === "register") {
+      const res = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password, displayName })
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || "register failed");
+      loginMessage.textContent = "登録完了。次にログインしてね。";
+      return;
+    } else {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || "login failed");
+
+      sessionToken = json.token;
+      currentUser = json.user;
+      avatarColor = currentUser.avatarColor || "#FFAA00";
+      phoneKey = currentUser.phoneKey || "p";
+
+      afterLogin();
+    }
+  } catch (e) {
+    console.error(e);
+    loginMessage.textContent = "エラー: " + e.message;
+  }
+};
+
+function afterLogin() {
+  loginOverlay.classList.add("hidden");
+  hud.classList.remove("hidden");
+
+  labelUsername.textContent = currentUser.username;
+  labelDisplayName.textContent = currentUser.displayName;
+  displayNameInput.value = currentUser.displayName;
+  avatarColorInput.value = avatarColor;
+  phoneKeyInput.value = phoneKey;
+  phoneKeyLabel.textContent = phoneKey.toUpperCase();
+
+  playerAvatar.setAttribute("material", `color: ${avatarColor}`);
+  playerNameTag.setAttribute(
+    "text",
+    `value: ${currentUser.displayName}; align: center; color: #00FFFF; width: 4`
   );
 
-  ws.onopen = () => {
-    console.log("WS connected");
-  };
+  initSocket();
+  connectWS(currentRoomId);
+  loadMyRooms();
+  loadSnsHistory();
+  loadDmHistory();
+}
+
+// --- アカウント更新 ---
+accountUpdateBtn.onclick = async () => {
+  const displayName = displayNameInput.value.trim() || currentUser.username;
+  const avatarColorVal = avatarColorInput.value || "#FFAA00";
+  const phoneKeyVal = phoneKeyInput.value.trim().toLowerCase() || "p";
+
+  try {
+    const res = await fetch("/api/updateUser", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-session-token": sessionToken
+      },
+      body: JSON.stringify({
+        displayName,
+        avatarColor: avatarColorVal,
+        phoneKey: phoneKeyVal
+      })
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || "update failed");
+
+    currentUser.displayName = displayName;
+    currentUser.avatarColor = avatarColorVal;
+    currentUser.phoneKey = phoneKeyVal;
+    avatarColor = avatarColorVal;
+    phoneKey = phoneKeyVal;
+
+    labelDisplayName.textContent = displayName;
+    playerAvatar.setAttribute("material", `color: ${avatarColor}`);
+    playerNameTag.setAttribute(
+      "text",
+      `value: ${displayName}; align: center; color: #00FFFF; width: 4`
+    );
+    phoneKeyLabel.textContent = phoneKey.toUpperCase();
+
+    alert("更新しました");
+  } catch (e) {
+    console.error(e);
+    alert("更新に失敗しました");
+  }
+};
+
+// --- ルーム関連 ---
+async function loadMyRooms() {
+  try {
+    const res = await fetch("/api/myRooms", {
+      headers: { "x-session-token": sessionToken }
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || "myRooms failed");
+
+    myRoomsList.innerHTML = "";
+    json.rooms.forEach((room) => {
+      const div = document.createElement("div");
+      div.textContent = `${room.id} (${room.name})`;
+      div.style.cursor = "pointer";
+      div.onclick = () => {
+        roomInput.value = room.id;
+        currentRoomId = room.id;
+        loadRoom(room.id);
+      };
+      myRoomsList.appendChild(div);
+    });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+createRoomBtn.onclick = async () => {
+  const roomId = roomInput.value.trim();
+  if (!roomId) return alert("Room ID を入力してね");
+
+  try {
+    const res = await fetch("/api/createRoom", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-session-token": sessionToken
+      },
+      body: JSON.stringify({ roomId, name: roomId })
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || "createRoom failed");
+
+    alert("ルーム作成しました");
+    currentRoomId = roomId;
+    loadMyRooms();
+    loadRoom(roomId);
+  } catch (e) {
+    console.error(e);
+    alert("ルーム作成に失敗しました");
+  }
+};
+
+joinRoomBtn.onclick = () => {
+  const roomId = roomInput.value.trim() || "lobby";
+  currentRoomId = roomId;
+  loadRoom(roomId);
+};
+
+async function loadRoom(roomId) {
+  try {
+    const res = await fetch(`/api/getRoom/${encodeURIComponent(roomId)}`);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || "getRoom failed");
+
+    const room = json.room;
+
+    // 環境反映
+    envSky.setAttribute("color", room.environment.skyColor);
+    envLight.setAttribute(
+      "light",
+      `type: ambient; color: ${room.environment.ambientColor}`
+    );
+    const scene = document.getElementById("scene");
+    scene.setAttribute(
+      "fog",
+      `type: exponential; color: ${room.environment.fogColor}; density: ${room.environment.fogDensity}`
+    );
+
+    ground.setAttribute("width", room.bounds.width);
+    ground.setAttribute("height", room.bounds.depth);
+
+    // 既存オブジェクト削除
+    document
+      .querySelectorAll(".room-object")
+      .forEach((e) => e.parentNode.removeChild(e));
+
+    // オブジェクト生成
+    room.objects.forEach((obj) => {
+      const e = document.createElement("a-entity");
+      e.setAttribute("id", `obj-${obj.id}`);
+      e.classList.add("room-object");
+
+      if (obj.type === "box") {
+        e.setAttribute("geometry", "primitive: box");
+      } else if (obj.type === "sphere") {
+        e.setAttribute("geometry", "primitive: sphere");
+      }
+
+      e.setAttribute("material", `color: ${obj.color || "#FFFFFF"}`);
+      e.setAttribute("position", obj.position);
+      e.setAttribute("rotation", obj.rotation);
+      e.setAttribute("scale", obj.scale);
+
+      scene.appendChild(e);
+    });
+
+    // エディタ側にも反映
+    window.editorLoadRoom(roomId, room);
+    connectWS(roomId);
+    socket.emit("join-room", {
+      roomId,
+      username: currentUser.username
+    });
+  } catch (e) {
+    console.error(e);
+    alert("ルーム読み込みに失敗しました");
+  }
+}
+
+// --- WebSocket（位置同期） ---
+let ws;
+function connectWS(roomId) {
+  if (ws) {
+    ws.close();
+  }
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(
+    `${proto}://${location.host}/?room=${roomId}&username=${encodeURIComponent(
+      currentUser.username
+    )}`
+  );
 
   ws.onmessage = (msg) => {
     const data = JSON.parse(msg.data);
@@ -172,41 +419,69 @@ function connectWS(room) {
   };
 }
 
-// --- Socket.IO（音声＋SNS履歴＋DM履歴） ---
+// --- Socket.IO（音声＋SNS＋DM） ---
 const socket = io();
 window.socket = socket;
 
 let localStream = null;
 let peers = {};
 
-socket.on("connect", () => {
-  socketIdLabel.textContent = socket.id;
-
-  socket.emit("join-room", {
-    roomId: currentRoom,
-    username
-  });
-});
-
-socket.on("sns-history", (messages) => {
-  // HUD側
-  messages.forEach((m) => {
-    addSnsItem(snsFeed, {
-      userDisplayName: m.userDisplayName,
-      text: m.text,
-      time: m.time
+function initSocket() {
+  socket.on("connect", () => {
+    socketIdLabel.textContent = socket.id;
+    socket.emit("join-room", {
+      roomId: currentRoomId,
+      username: currentUser.username
     });
   });
-});
 
-socket.on("dm-history", (messages) => {
-  messages.forEach((m) => {
-    addDmLog(
-      `履歴 ← ${m.fromDisplayName} (${m.fromUsername})`,
-      `${m.message} (${m.time})`
-    );
+  socket.on("sns-history", (messages) => {
+    snsFeed.innerHTML = "";
+    messages.forEach((m) => {
+      addSnsItem(snsFeed, m);
+    });
   });
-});
+
+  socket.on("dm-history", (messages) => {
+    messages.forEach((m) => {
+      addDmLog(
+        `履歴 ← ${m.fromDisplayName} (${m.fromUsername})`,
+        `${m.message} (${m.time})`
+      );
+    });
+  });
+
+  socket.on("sns-feed", (msg) => {
+    addSnsItem(snsFeed, msg);
+  });
+
+  socket.on("dm-receive", ({ from, fromUsername, fromDisplayName, message, time }) => {
+    const label = `${fromDisplayName || fromUsername} (${fromUsername})`;
+    addDmLog(`受信 ← ${label}`, `${message} (${time})`);
+  });
+
+  socket.on("signal", async ({ from, data }) => {
+    let pc = peers[from];
+    if (!pc) {
+      pc = await createPeerConnection(from, false);
+    }
+
+    if (data.type === "offer") {
+      await pc.setRemoteDescription(new RTCSessionDescription(data));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit("signal", { to: from, data: answer });
+    } else if (data.type === "answer") {
+      await pc.setRemoteDescription(new RTCSessionDescription(data));
+    } else if (data.candidate) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  });
+}
 
 // 音声チャット
 startVoiceBtn.onclick = async () => {
@@ -222,34 +497,12 @@ startVoiceBtn.onclick = async () => {
     return;
   }
 
-  socket.emit("get-peers", currentRoom, async (peerIds) => {
+  socket.emit("get-peers", currentRoomId, async (peerIds) => {
     for (const peerId of peerIds) {
       await createPeerConnection(peerId, true);
     }
   });
 };
-
-socket.on("signal", async ({ from, data }) => {
-  let pc = peers[from];
-  if (!pc) {
-    pc = await createPeerConnection(from, false);
-  }
-
-  if (data.type === "offer") {
-    await pc.setRemoteDescription(new RTCSessionDescription(data));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    socket.emit("signal", { to: from, data: answer });
-  } else if (data.type === "answer") {
-    await pc.setRemoteDescription(new RTCSessionDescription(data));
-  } else if (data.candidate) {
-    try {
-      await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-    } catch (e) {
-      console.error(e);
-    }
-  }
-});
 
 async function createPeerConnection(peerId, isCaller) {
   const pc = new RTCPeerConnection({
@@ -287,215 +540,13 @@ async function createPeerConnection(peerId, isCaller) {
   return pc;
 }
 
-// --- アカウント名・表示名更新 ---
-function applyAccount(usernameVal, displayNameVal) {
-  username = usernameVal || "guest";
-  displayName = displayNameVal || username;
-
-  usernameInput.value = username;
-  displayNameInput.value = displayName;
-  phoneUsernameInput.value = username;
-  phoneDisplayNameInput.value = displayName;
-
-  playerNameTag.setAttribute(
-    "text",
-    `value: ${displayName}; align: center; color: #00FFFF; width: 4`
-  );
-}
-
-// HUD側変更
-usernameInput.addEventListener("change", () => {
-  applyAccount(usernameInput.value.trim(), displayNameInput.value.trim());
-});
-displayNameInput.addEventListener("change", () => {
-  applyAccount(usernameInput.value.trim(), displayNameInput.value.trim());
-});
-
-// スマホ側変更
-phoneAccountApply.onclick = () => {
-  applyAccount(
-    phoneUsernameInput.value.trim(),
-    phoneDisplayNameInput.value.trim()
-  );
-};
-
-// サーバに保存
-accountSaveBtn.onclick = async () => {
-  if (!usernameInput.value.trim()) {
-    alert("ユーザー名を入力してね");
-    return;
-  }
-  applyAccount(usernameInput.value.trim(), displayNameInput.value.trim());
-
-  const body = {
-    username,
-    displayName,
-    avatarColor,
-    phoneKey,
-    groundColor: ground.getAttribute("color"),
-    boxColor: box1.getAttribute("color")
-  };
-
-  try {
-    const res = await fetch("/api/saveUser", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
-    const json = await res.json();
-    if (!json.ok) throw new Error(json.error || "save failed");
-    alert("サーバに保存しました");
-  } catch (e) {
-    console.error(e);
-    alert("保存に失敗しました");
-  }
-};
-
-// サーバからロード
-accountLoadBtn.onclick = async () => {
-  const u = usernameInput.value.trim();
-  if (!u) {
-    alert("ユーザー名を入力してね");
-    return;
-  }
-  try {
-    const res = await fetch(`/api/getUser/${encodeURIComponent(u)}`);
-    const json = await res.json();
-    if (!json.ok) throw new Error(json.error || "load failed");
-    const user = json.user;
-
-    applyAccount(user.username, user.displayName);
-    avatarColor = user.avatarColor || "#FFAA00";
-    avatarColorInput.value = avatarColor;
-    playerAvatar.setAttribute("material", `color: ${avatarColor}`);
-
-    phoneKey = user.phoneKey || "p";
-    setPhoneKeyLabel();
-
-    ground.setAttribute("color", user.groundColor || "#7BC8A4");
-    box1.setAttribute("color", user.boxColor || "#4CC3D9");
-    roomGroundColorInput.value = user.groundColor || "#7BC8A4";
-    roomBoxColorInput.value = user.boxColor || "#4CC3D9";
-
-    alert("サーバからロードしました");
-  } catch (e) {
-    console.error(e);
-    alert("ロードに失敗しました");
-  }
-};
-
-// --- スマホUI ---
-function setPhoneKeyLabel() {
-  phoneKeyLabel.textContent = phoneKey.toUpperCase();
-}
-setPhoneKeyLabel();
-
-function openPhone() {
-  phone.classList.remove("hidden");
-}
-function closePhone() {
-  phone.classList.add("hidden");
-}
-
-phoneClose.onclick = closePhone;
-
-phoneTabs.forEach((btn) => {
-  btn.onclick = () => {
-    const tabId = btn.dataset.tab;
-    document
-      .querySelectorAll(".phone-tab")
-      .forEach((tab) => tab.classList.add("hidden"));
-    document
-      .getElementById(`tab-${tabId}`)
-      .classList.remove("hidden");
-  };
-});
-
-// スマホキー保存
-phoneKeySave.onclick = () => {
-  const v = phoneKeyInput.value.trim().toLowerCase();
-  if (!v || v.length !== 1) {
-    alert("1文字のキーを入力してね");
-    return;
-  }
-  phoneKey = v;
-  setPhoneKeyLabel();
-  alert(`スマホキーを "${phoneKey.toUpperCase()}" に変更しました`);
-};
-
-// スマホ開閉キー
-window.addEventListener("keydown", (e) => {
-  if (e.key.toLowerCase() === phoneKey) {
-    if (phone.classList.contains("hidden")) {
-      openPhone();
-    } else {
-      closePhone();
-    }
-  }
-});
-
-// --- ルーム模様替え ---
-roomApplyBtn.onclick = () => {
-  const gColor = roomGroundColorInput.value || "#7BC8A4";
-  const bColor = roomBoxColorInput.value || "#4CC3D9";
-  ground.setAttribute("color", gColor);
-  box1.setAttribute("color", bColor);
-};
-
-// --- アバター設定 ---
-avatarApplyBtn.onclick = () => {
-  avatarColor = avatarColorInput.value || "#FFAA00";
-  playerAvatar.setAttribute("material", `color: ${avatarColor}`);
-};
-
-// --- DM ---
-dmSendBtn.onclick = () => {
-  const toUsername = dmToUsernameInput.value.trim();
-  const toSocketId = dmToSocketInput.value.trim();
-  const message = dmTextInput.value.trim();
-  if (!toUsername || !toSocketId || !message) return;
-
-  socket.emit("dm-send", {
-    toSocketId,
-    message,
-    fromUsername: username,
-    fromDisplayName: displayName,
-    toUsername
-  });
-
-  addDmLog(`自分 (${displayName}/${username}) → ${toUsername}`, message);
-  dmTextInput.value = "";
-};
-
-socket.on("dm-receive", ({ from, fromUsername, fromDisplayName, message, time }) => {
-  const label = `${fromDisplayName || fromUsername} (${fromUsername})`;
-  addDmLog(`受信 ← ${label}`, `${message} (${time})`);
-});
-
-function addDmLog(fromLabel, text) {
-  const div = document.createElement("div");
-  div.className = "dm-item";
-
-  const fromEl = document.createElement("div");
-  fromEl.className = "dm-from";
-  fromEl.textContent = fromLabel;
-
-  const textEl = document.createElement("div");
-  textEl.className = "dm-text";
-  textEl.textContent = text;
-
-  div.appendChild(fromEl);
-  div.appendChild(textEl);
-  dmLog.prepend(div);
-}
-
-// --- SNS（HUD側） ---
+// --- SNS ---
 snsSendBtn.onclick = () => {
   const text = snsTextInput.value.trim();
   if (!text) return;
 
   const post = {
-    userDisplayName: displayName,
+    userDisplayName: currentUser.displayName,
     text,
     time: new Date().toLocaleTimeString()
   };
@@ -503,10 +554,6 @@ snsSendBtn.onclick = () => {
   socket.emit("sns-post", post);
   snsTextInput.value = "";
 };
-
-socket.on("sns-feed", (msg) => {
-  addSnsItem(snsFeed, msg);
-});
 
 function addSnsItem(container, post) {
   const div = document.createElement("div");
@@ -530,14 +577,107 @@ function addSnsItem(container, post) {
   container.prepend(div);
 }
 
-// --- ルーム切り替え ---
-joinRoomBtn.onclick = () => {
-  const room = roomInput.value.trim();
-  if (!room) return alert("Room ID を入力してね");
-  const u = new URL(window.location.href);
-  u.searchParams.set("room", room);
-  window.location.href = u.toString();
+// --- DM ---
+dmSendBtn.onclick = () => {
+  const toUsername = dmToUsernameInput.value.trim();
+  const toSocketId = dmToSocketInput.value.trim();
+  const message = dmTextInput.value.trim();
+  if (!toUsername || !toSocketId || !message) return;
+
+  socket.emit("dm-send", {
+    toSocketId,
+    message,
+    fromUsername: currentUser.username,
+    fromDisplayName: currentUser.displayName,
+    toUsername
+  });
+
+  addDmLog(
+    `自分 (${currentUser.displayName}/${currentUser.username}) → ${toUsername}`,
+    message
+  );
+  dmTextInput.value = "";
 };
+
+function addDmLog(fromLabel, text) {
+  const div = document.createElement("div");
+  div.className = "dm-item";
+
+  const fromEl = document.createElement("div");
+  fromEl.className = "dm-from";
+  fromEl.textContent = fromLabel;
+
+  const textEl = document.createElement("div");
+  textEl.className = "dm-text";
+  textEl.textContent = text;
+
+  div.appendChild(fromEl);
+  div.appendChild(textEl);
+  dmLog.prepend(div);
+}
+
+// --- SNS履歴 / DM履歴（REST） ---
+async function loadSnsHistory() {
+  try {
+    const res = await fetch("/api/snsHistory");
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || "snsHistory failed");
+    snsFeed.innerHTML = "";
+    json.messages.forEach((m) => addSnsItem(snsFeed, m));
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function loadDmHistory() {
+  try {
+    const res = await fetch("/api/dmHistory", {
+      headers: { "x-session-token": sessionToken }
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || "dmHistory failed");
+    json.messages.forEach((m) => {
+      addDmLog(
+        `履歴 ← ${m.fromDisplayName} (${m.fromUsername})`,
+        `${m.message} (${m.time})`
+      );
+    });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// --- スマホ ---
+function openPhone() {
+  phone.classList.remove("hidden");
+}
+function closePhone() {
+  phone.classList.add("hidden");
+}
+phoneClose.onclick = closePhone;
+
+phoneTabs.forEach((btn) => {
+  btn.onclick = () => {
+    const tabId = btn.dataset.tab;
+    document
+      .querySelectorAll(".phone-tab")
+      .forEach((tab) => tab.classList.add("hidden"));
+    document
+      .getElementById(`tab-${tabId}`)
+      .classList.remove("hidden");
+  };
+});
+
+window.addEventListener("keydown", (e) => {
+  if (!currentUser) return;
+  if (e.key.toLowerCase() === phoneKey) {
+    if (phone.classList.contains("hidden")) {
+      openPhone();
+    } else {
+      closePhone();
+    }
+  }
+});
 
 // --- 移動・重力・同期 ---
 let lastTime = performance.now();
@@ -547,7 +687,7 @@ function tick() {
   const dt = (now - lastTime) / 1000;
   lastTime = now;
 
-  updateMovement(dt);
+  if (currentUser) updateMovement(dt);
   requestAnimationFrame(tick);
 }
 
@@ -577,7 +717,7 @@ function updateMovement(dt) {
   const rightZ = -Math.sin(rad);
 
   const moveX = (forwardX * inputZ + rightX * inputX) * MOVE_SPEED;
-  const moveZ = (forwardZ * inputZ + rightZ * inputX) * MOVE_SPEED;
+  const moveZ = (forwardZ * inputZ + rightX * inputX) * MOVE_SPEED;
 
   velocity.x = moveX;
   velocity.z = moveZ;
@@ -610,6 +750,10 @@ function updateMovement(dt) {
   }
 }
 
-// 初期接続
-connectWS(currentRoom);
 tick();
+
+// --- エディタ起動 ---
+openEditorBtn.onclick = () => {
+  if (!currentRoomId) return alert("ルームを選択してね");
+  window.editorOpen(currentRoomId, sessionToken);
+};
