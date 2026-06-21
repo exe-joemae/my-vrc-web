@@ -3,15 +3,9 @@ const snsName = document.getElementById("sns-name");
 const snsText = document.getElementById("sns-text");
 const snsSend = document.getElementById("sns-send");
 
-// client.js で作った socket を再利用
-// もし別ファイルで socket を共有したくない場合は、ここでも io() してOK
-// ここでは window.socket を使う前提にする
-// client.js の末尾に `window.socket = socket;` を追加しておくと安全
-// 今回は簡略化のため、sns.js 側でも io() する
+// client.js で window.socket に入れてある
+const snsSocket = window.socket || io();
 
-const snsSocket = io();
-
-// 投稿
 snsSend.onclick = () => {
   const user = snsName.value.trim() || "名無し";
   const text = snsText.value.trim();
@@ -27,7 +21,6 @@ snsSend.onclick = () => {
   snsText.value = "";
 };
 
-// 受信
 snsSocket.on("sns-feed", (post) => {
   const div = document.createElement("div");
   div.className = "sns-item";
