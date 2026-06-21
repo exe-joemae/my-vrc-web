@@ -2,21 +2,14 @@ const phoneSnsFeed = document.getElementById("phone-sns-feed");
 const phoneSnsText = document.getElementById("phone-sns-text");
 const phoneSnsSend = document.getElementById("phone-sns-send");
 
-// client.js で window.socket に入れてある
-const snsSocket = window.socket || io();
+const snsSocket = window.socket;
 
-// スマホ版SNS投稿
 phoneSnsSend.onclick = () => {
   const text = phoneSnsText.value.trim();
-  if (!text) return;
-
-  // displayName は client.js 側のグローバルを使いたいけど、
-  // ここでは簡略化して "MobileUser" とするか、
-  // window.displayName を使う前提にしてもOK。
-  const displayName = window.displayName || "MobileUser";
+  if (!text || !window.currentUser) return;
 
   const post = {
-    userDisplayName: displayName,
+    userDisplayName: window.currentUser.displayName,
     text,
     time: new Date().toLocaleTimeString()
   };
@@ -25,8 +18,6 @@ phoneSnsSend.onclick = () => {
   phoneSnsText.value = "";
 };
 
-// 履歴は socket.on("sns-history") を client.js 側で受けているので、
-// ここではリアルタイム分だけ表示
 snsSocket.on("sns-feed", (msg) => {
   addSnsItem(phoneSnsFeed, msg);
 });
