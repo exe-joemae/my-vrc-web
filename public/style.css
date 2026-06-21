@@ -5,6 +5,76 @@ body {
   color: #e0f7ff;
 }
 
+/* ログイン */
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at top, #050510, #000000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.login-panel {
+  width: 320px;
+  background: rgba(5, 10, 30, 0.9);
+  border-radius: 12px;
+  border: 1px solid #00ffff55;
+  box-shadow: 0 0 20px #00ffff55;
+  padding: 16px;
+}
+
+.login-panel h2 {
+  margin: 0 0 8px;
+  text-align: center;
+  color: #00ffff;
+  letter-spacing: 2px;
+}
+
+.login-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.login-tab-btn {
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid #00ffff55;
+  background: #050818;
+  color: #e0f7ff;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.login-tab-btn.active {
+  background: #0a1a3a;
+  box-shadow: 0 0 8px #00ffff55;
+}
+
+.login-body label {
+  font-size: 11px;
+  margin-top: 4px;
+  display: block;
+}
+
+.login-body input {
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 4px;
+  border-radius: 4px;
+  border: 1px solid #00ffff55;
+  background: #050818;
+  color: #e0f7ff;
+  font-size: 11px;
+}
+
+.hidden {
+  display: none;
+}
+
 /* サイバーHUD */
 .cyber-panel {
   position: absolute;
@@ -17,9 +87,13 @@ body {
   color: #e0f7ff;
   padding: 8px;
   border-radius: 8px;
-  max-width: 300px;
+  max-width: 320px;
   font-size: 12px;
   backdrop-filter: blur(6px);
+}
+
+.cyber-panel.hidden {
+  display: none;
 }
 
 .cyber-title {
@@ -104,7 +178,7 @@ input {
   opacity: 0.7;
 }
 
-/* スマホ（サイバー端末） */
+/* スマホ */
 .phone {
   position: absolute;
   right: 20px;
@@ -195,4 +269,77 @@ input {
 }
 .dm-text {
   font-size: 12px;
+}
+
+/* エディタ */
+.editor-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 30;
+  display: flex;
+  justify-content: flex-end;
+  align-items: stretch;
+}
+
+.editor-overlay.hidden {
+  display: none;
+}
+
+.editor-panel {
+  width: 420px;
+  background: rgba(5, 10, 30, 0.95);
+  border-left: 1px solid #00ffff55;
+  box-shadow: -4px 0 20px #00ffff55;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #00ffff44;
+  color: #00ffff;
+  font-size: 12px;
+}
+
+.editor-close {
+  background: transparent;
+  color: #ff8080;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.editor-body {
+  flex: 1;
+  padding: 8px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.editor-section {
+  margin-bottom: 10px;
+  border-top: 1px solid #00ffff33;
+  padding-top: 6px;
+}
+
+.editor-section h4 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: #66e0ff;
+}
+
+.editor-section input,
+.editor-section select {
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 4px;
+  border-radius: 4px;
+  border: 1px solid #00ffff55;
+  background: #050818;
+  color: #e0f7ff;
+  font-size: 11px;
 }
