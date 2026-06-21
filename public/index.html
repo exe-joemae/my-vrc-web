@@ -2,58 +2,92 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Web VRC with Phone UI</title>
+    <title>Cyber VRC</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- 画面左上の基本UI -->
-    <div id="ui">
-      <div id="room-ui">
+    <!-- 左上HUD（サイバー風） -->
+    <div id="ui" class="cyber-panel">
+      <div class="cyber-title">CYBER VRC</div>
+
+      <div id="account-ui" class="cyber-block">
+        <label>アカウント名</label>
+        <input id="accountName" placeholder="名前" />
+        <div class="small-text">
+          Socket ID: <span id="socketIdLabel">-</span>
+        </div>
+      </div>
+
+      <div id="room-ui" class="cyber-block">
+        <label>Room ID</label>
         <input id="roomId" placeholder="Room ID" />
-        <button id="joinRoomBtn">Join / Create Room</button>
+        <button id="joinRoomBtn" class="cyber-btn">Join / Create</button>
       </div>
 
-      <div id="voice-ui">
-        <button id="startVoiceBtn">音声チャット開始</button>
+      <div id="voice-ui" class="cyber-block">
+        <button id="startVoiceBtn" class="cyber-btn accent">
+          音声チャット開始
+        </button>
       </div>
 
-      <div id="sns-ui">
-        <h3>全ルーム共通SNS</h3>
-        <div id="sns-feed"></div>
+      <div id="sns-ui" class="cyber-block">
+        <div class="block-title">GLOBAL FEED</div>
+        <div id="sns-feed" class="cyber-scroll"></div>
         <input id="sns-name" placeholder="名前" />
         <input id="sns-text" placeholder="メッセージ" />
-        <button id="sns-send">投稿</button>
+        <button id="sns-send" class="cyber-btn">投稿</button>
       </div>
 
-      <div id="phone-hint">
-        スマホキー: <span id="phoneKeyLabel">P</span> で開閉
+      <div id="phone-hint" class="cyber-block small-text">
+        PHONE KEY: <span id="phoneKeyLabel">P</span>
       </div>
     </div>
 
-    <!-- スマホUI -->
-    <div id="phone" class="hidden">
-      <div id="phone-header">
-        <span>スマホ</span>
-        <button id="phone-close">×</button>
+    <!-- スマホUI（サイバー風） -->
+    <div id="phone" class="phone hidden">
+      <div id="phone-header" class="phone-header">
+        <span>NEO DEVICE</span>
+        <button id="phone-close" class="phone-close">×</button>
       </div>
-      <div id="phone-tabs">
-        <button data-tab="settings">設定</button>
-        <button data-tab="room">ルーム模様替え</button>
-        <button data-tab="avatar">アバター設定</button>
-        <button data-tab="sns">SNS</button>
-        <button data-tab="dm">DM</button>
+      <div id="phone-tabs" class="phone-tabs">
+        <button data-tab="settings" class="phone-tab-btn">設定</button>
+        <button data-tab="account" class="phone-tab-btn">アカウント</button>
+        <button data-tab="room" class="phone-tab-btn">ルーム</button>
+        <button data-tab="avatar" class="phone-tab-btn">アバター</button>
+        <button data-tab="sns" class="phone-tab-btn">SNS</button>
+        <button data-tab="dm" class="phone-tab-btn">DM</button>
       </div>
-      <div id="phone-content">
+      <div id="phone-content" class="phone-content">
         <!-- 設定タブ -->
         <div class="phone-tab" id="tab-settings">
           <h4>設定</h4>
           <label>
-            スマホを開くキー:
+            スマホキー:
             <input id="phoneKeyInput" placeholder="例: P" maxlength="1" />
           </label>
-          <button id="phoneKeySave">保存</button>
+          <button id="phoneKeySave" class="cyber-btn">保存</button>
+          <hr />
+          <button id="saveAllBtn" class="cyber-btn accent">
+            全設定をセーブ
+          </button>
+          <button id="loadAllBtn" class="cyber-btn">
+            セーブデータをロード
+          </button>
+        </div>
+
+        <!-- アカウントタブ -->
+        <div class="phone-tab hidden" id="tab-account">
+          <h4>アカウント</h4>
+          <p class="small-text">
+            上のHUDと同じアカウント名が使われます（DM・ネームタグ用）。
+          </p>
+          <label>
+            アカウント名:
+            <input id="phoneAccountName" placeholder="名前" />
+          </label>
+          <button id="phoneAccountApply" class="cyber-btn">適用</button>
         </div>
 
         <!-- ルーム模様替えタブ -->
@@ -67,7 +101,7 @@
             ボックスの色:
             <input id="roomBoxColor" type="color" value="#4CC3D9" />
           </label>
-          <button id="roomApply">適用</button>
+          <button id="roomApply" class="cyber-btn">適用</button>
         </div>
 
         <!-- アバター設定タブ -->
@@ -77,37 +111,37 @@
             アバター色:
             <input id="avatarColorInput" type="color" value="#FFAA00" />
           </label>
-          <button id="avatarApply">適用</button>
+          <button id="avatarApply" class="cyber-btn">適用</button>
         </div>
 
         <!-- SNSタブ（スマホ版） -->
         <div class="phone-tab hidden" id="tab-sns">
-          <h4>SNS（スマホ版）</h4>
-          <div id="phone-sns-feed"></div>
+          <h4>SNS</h4>
+          <div id="phone-sns-feed" class="cyber-scroll"></div>
           <input id="phone-sns-name" placeholder="名前" />
           <input id="phone-sns-text" placeholder="メッセージ" />
-          <button id="phone-sns-send">投稿</button>
+          <button id="phone-sns-send" class="cyber-btn">投稿</button>
         </div>
 
         <!-- DMタブ -->
         <div class="phone-tab hidden" id="tab-dm">
           <h4>DM</h4>
-          <div>
-            <label>
-              宛先 Socket ID:
-              <input id="dm-to" placeholder="相手の Socket ID" />
-            </label>
+          <div class="small-text">
+            宛先 Socket ID を指定してメッセージを送信します。
           </div>
-          <div id="dm-log"></div>
+          <label>
+            宛先 Socket ID:
+            <input id="dm-to" placeholder="相手の Socket ID" />
+          </label>
+          <div id="dm-log" class="cyber-scroll"></div>
           <input id="dm-text" placeholder="メッセージ" />
-          <button id="dm-send">送信</button>
+          <button id="dm-send" class="cyber-btn">送信</button>
         </div>
       </div>
     </div>
 
     <!-- 3Dシーン -->
     <a-scene id="scene">
-      <!-- 仮アバター用テンプレ -->
       <a-assets>
         <template id="avatar-template">
           <a-entity>
@@ -122,7 +156,7 @@
         </template>
       </a-assets>
 
-      <!-- 自分のアバター -->
+      <!-- 自分のアバター＋ネームタグ -->
       <a-entity id="playerRoot" position="0 1 0">
         <a-entity
           id="playerCamera"
@@ -136,9 +170,14 @@
           material="color: #FFAA00"
           position="0 0.8 0"
         ></a-entity>
+        <a-entity
+          id="playerNameTag"
+          text="value: Guest; align: center; color: #00FFFF; width: 4"
+          position="0 2.2 0"
+        ></a-entity>
       </a-entity>
 
-      <!-- 地面とオブジェクト（模様替え対象） -->
+      <!-- 地面とオブジェクト -->
       <a-plane
         id="ground"
         position="0 0 0"
