@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Cyber VRC - Login & Editor</title>
+    <title>Cyber VRC - Login & Editor & Map</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <link rel="stylesheet" href="style.css" />
@@ -49,7 +49,7 @@
 
       <div id="room-ui" class="cyber-block">
         <label>Room ID</label>
-        <input id="roomId" placeholder="Room ID" />
+        <input id="roomId" placeholder="Room ID (lobby は自動)" />
         <button id="joinRoomBtn" class="cyber-btn">Join</button>
         <button id="createRoomBtn" class="cyber-btn">Create & Own</button>
         <div class="small-text">
@@ -94,6 +94,7 @@
       <div id="phone-tabs" class="phone-tabs">
         <button data-tab="sns" class="phone-tab-btn">SNS</button>
         <button data-tab="dm" class="phone-tab-btn">DM</button>
+        <button data-tab="map" class="phone-tab-btn">MAP</button>
       </div>
       <div id="phone-content" class="phone-content">
         <!-- SNSタブ -->
@@ -117,6 +118,28 @@
           <div id="dm-log" class="cyber-scroll"></div>
           <input id="dm-text" placeholder="メッセージ" />
           <button id="dm-send" class="cyber-btn">送信</button>
+        </div>
+
+        <!-- MAPタブ -->
+        <div class="phone-tab hidden" id="tab-map">
+          <h4>MAP</h4>
+          <div class="small-text">
+            上から見た俯瞰マップ。自分は中央。<br />
+            北固定 / 向き固定を切り替え可能。
+          </div>
+          <div class="map-controls">
+            <label>マップモード</label>
+            <select id="map-mode">
+              <option value="north">北を上</option>
+              <option value="heading">向いている方向を上</option>
+            </select>
+          </div>
+          <div id="map-canvas-wrapper">
+            <canvas id="map-canvas" width="240" height="240"></canvas>
+          </div>
+          <div class="small-text">
+            白い点: 他プレイヤー / シアン: 自分
+          </div>
         </div>
       </div>
     </div>
